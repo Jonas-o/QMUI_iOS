@@ -21,7 +21,7 @@
 #import "UIImage+QMUI.h"
 #import <objc/message.h>
 
-@interface UIImage ()
+@interface UIImage (QMUIThemePrivate)
 
 @property(nonatomic, assign) BOOL qmui_shouldUseSystemIMP;
 + (nullable UIImage *)qmui_dynamicImageWithOriginalImage:(UIImage *)image tintColor:(UIColor *)tintColor originalActionBlock:(UIImage * (^)(UIImage *aImage, UIColor *aTintColor))originalActionBlock;
