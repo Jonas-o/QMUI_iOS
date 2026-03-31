@@ -169,9 +169,11 @@ BeginIgnoreDeprecatedWarning
             // animated:NO 的情况下设置 active:NO，取消按钮无法自动消失（系统 bug），所以这里手动管理
             // 如果是 animated:YES 或者 active:YES 则没这个问题
             // 这里修改了 searchBar.showsCancelButton 属性会让 automaticallyShowsCancelButton 变为 NO，且不能在这时候立马把它改为 YES，否则会立马出现取消按钮，所以改为在下一次 willPresentSearchController: 里重置为系统自动管理。
-            if (!active && self.searchController.automaticallyShowsCancelButton) {
-                self.searchController.searchBar.showsCancelButton = NO;
-                self.hasSetShowsCancelButton = YES;
+            if (@available(iOS 13.0, *)) {
+                if (!active && self.searchController.automaticallyShowsCancelButton) {
+                    self.searchController.searchBar.showsCancelButton = NO;
+                    self.hasSetShowsCancelButton = YES;
+                }
             }
         }];
     } else {
@@ -380,7 +382,9 @@ BeginIgnoreDeprecatedWarning
     
     // 走到这里意味着曾经因为 setActive:NO animated:NO 而不得不手动修改 searchBar.showsCancelButton 属性，导致 automaticallyShowsCancelButton 为 NO，系统无法自动显示取消按钮，所以这里在进入搜索前恢复自动管理
     if (self.hasSetShowsCancelButton) {
-        self.searchController.automaticallyShowsCancelButton = YES;
+        if (@available(iOS 13.0, *)) {
+            self.searchController.automaticallyShowsCancelButton = YES;
+        }
         self.hasSetShowsCancelButton = NO;
     }
     
@@ -498,7 +502,7 @@ static char kAssociatedObjectKey_shouldShowSearchBar;
 
 - (void)initSearchController {
     if ([self isViewLoaded] && self.shouldShowSearchBar && !self.searchController) {
-        self.searchController = [[QMUISearchController alloc] initWithContentsViewController:self resultsTableViewStyle:self.tableView.style];
+        self.searchController = [[QMUISearchController alloc] initWithContentsViewController:self resultsTableViewStyle:self.tableView.qmui_style];
         self.searchController.searchResultsDelegate = self;
         self.searchController.searchBar.placeholder = @"搜索";
         self.searchController.searchBar.qmui_usedAsTableHeaderView = YES;// 以 tableHeaderView 的方式使用 searchBar 的话，将其置为 YES，以辅助兼容一些系统 bug

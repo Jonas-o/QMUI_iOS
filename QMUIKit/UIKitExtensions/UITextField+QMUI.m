@@ -24,15 +24,36 @@
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         
-        // iOS 13 及以下版本需要重写该方法才能替换
-        // - (id) _clearButtonImageForState:(unsigned long)arg1;
-        // https://github.com/Tencent/QMUI_iOS/issues/1477
-        if (@available(iOS 14.0, *)) {
+        // iOS 12 及以下版本需要重写该方法才能替换
+        if (@available(iOS 13.0, *)) {
+            // iOS 13 及以下版本需要重写该方法才能替换
+            // - (id) _clearButtonImageForState:(unsigned long)arg1;
+            // https://github.com/Tencent/QMUI_iOS/issues/1477
+            if (@available(iOS 14.0, *)) {
+            } else {
+                OverrideImplementation([UITextField class], NSSelectorFromString(@"_clearButtonImageForState:"), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
+                    return ^UIImage *(UITextField *selfObject, UIControlState firstArgv) {
+                        
+                        if (selfObject.qmui_clearButtonImage && (firstArgv & UIControlStateNormal) == UIControlStateNormal) {
+                            return selfObject.qmui_clearButtonImage;
+                        }
+                        
+                        // call super
+                        UIImage *(*originSelectorIMP)(id, SEL, UIControlState);
+                        originSelectorIMP = (UIImage *(*)(id, SEL, UIControlState))originalIMPProvider();
+                        UIImage *result = originSelectorIMP(selfObject, originCMD, firstArgv);
+                        return result;
+                    };
+                });
+            }
         } else {
             OverrideImplementation([UITextField class], NSSelectorFromString(@"_clearButtonImageForState:"), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
                 return ^UIImage *(UITextField *selfObject, UIControlState firstArgv) {
                     
-                    if (selfObject.qmui_clearButtonImage && (firstArgv & UIControlStateNormal) == UIControlStateNormal) {
+                    if (selfObject.qmui_clearButtonImage) {
+                        if (firstArgv & UIControlStateHighlighted) {
+                            return [selfObject.qmui_clearButtonImage qmui_imageWithAlpha:UIControlHighlightedAlpha];
+                        }
                         return selfObject.qmui_clearButtonImage;
                     }
                     

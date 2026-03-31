@@ -290,7 +290,11 @@ QMUISynthesizeBOOLProperty(qmui_isControllerRootView, setQmui_isControllerRootVi
         return YES;
     }
     if ([self isKindOfClass:UIWindow.class]) {
-        return !!((UIWindow *)self).windowScene;
+        if (@available(iOS 13.0, *)) {
+            return !!((UIWindow *)self).windowScene;
+        } else {
+            return YES;
+        }
     }
     UIViewController *viewController = self.qmui_viewController;
     return viewController.qmui_visibleState >= QMUIViewControllerWillAppear && viewController.qmui_visibleState < QMUIViewControllerWillDisappear;

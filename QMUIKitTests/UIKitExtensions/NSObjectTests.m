@@ -25,12 +25,20 @@
     UINavigationBar *navigationBar = [UINavigationBar new];
     [navigationBar sizeToFit];
     XCTAssertTrue(navigationBar.qmui_backgroundView);
-    XCTAssertFalse(navigationBar.qmui_shadowImageView);
+    if (@available(iOS 13.0, *)) {
+        XCTAssertFalse(navigationBar.qmui_shadowImageView);
+    } else {
+        XCTAssertTrue(navigationBar.qmui_shadowImageView);
+    }
     
     UITabBar *tabBar = [UITabBar new];
     [tabBar sizeToFit];
     XCTAssertTrue(tabBar.qmui_backgroundView);
-    XCTAssertFalse(tabBar.qmui_shadowImageView);
+    if (@available(iOS 13.0, *)) {
+        XCTAssertFalse(tabBar.qmui_shadowImageView);
+    } else {
+        XCTAssertTrue(tabBar.qmui_shadowImageView);
+    }
     
     UISearchBar *searchBar = [UISearchBar new];
     searchBar.scopeButtonTitles = @[@"A", @"B"];

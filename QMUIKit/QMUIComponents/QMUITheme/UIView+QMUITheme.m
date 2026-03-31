@@ -140,6 +140,20 @@ QMUISynthesizeIdCopyProperty(qmui_themeDidChangeBlock, setQmui_themeDidChangeBlo
         BOOL isValidatedEffect = [value isKindOfClass:QMUIThemeVisualEffect.class] && (!manager || [((QMUIThemeVisualEffect *)value).managerName isEqual:manager.name]);
         BOOL isOtherObject = ![value isKindOfClass:UIColor.class] && ![value isKindOfClass:UIImage.class] && ![value isKindOfClass:UIVisualEffect.class];// 支持所有非 color、image、effect 的其他对象，例如 NSAttributedString
         if (isOtherObject || isValidatedColor || isValidatedImage || isValidatedEffect) {
+            
+            // 修复 iOS 12 及以下版本，QMUIThemeImage 在搭配 resizable 使用的情况下可能无法跟随主题刷新的 bug
+            // https://github.com/Tencent/QMUI_iOS/issues/971
+            if (@available(iOS 13.0, *)) {
+            } else {
+                if (isValidatedImage) {
+                    QMUIThemeImage *image = (QMUIThemeImage *)value;
+                    if (image.qmui_resizable) {
+                        value = image.copy;
+                    }
+                }
+            }
+            
+
             [self performSelector:setter withObject:value];
         }
         EndIgnorePerformSelectorLeaksWarning

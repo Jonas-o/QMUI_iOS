@@ -102,8 +102,8 @@
 #pragma mark - 忽略 iOS 13 KVC 访问私有属性限制
 
 /// 将 KVC 代码包裹在这个宏中，可忽略系统的  KVC 访问限制
-#define BeginIgnoreUIKVCAccessProhibited NSThread.currentThread.qmui_shouldIgnoreUIKVCAccessProhibited = YES;
-#define EndIgnoreUIKVCAccessProhibited NSThread.currentThread.qmui_shouldIgnoreUIKVCAccessProhibited = NO;
+#define BeginIgnoreUIKVCAccessProhibited if (@available(iOS 13.0, *)) NSThread.currentThread.qmui_shouldIgnoreUIKVCAccessProhibited = YES;
+#define EndIgnoreUIKVCAccessProhibited if (@available(iOS 13.0, *)) NSThread.currentThread.qmui_shouldIgnoreUIKVCAccessProhibited = NO;
 
 #pragma mark - 变量-设备相关
 
@@ -311,6 +311,9 @@ AddAccessibilityHint(NSObject *obj, NSString *hint) {
 
 
 #pragma mark - 其他
+
+// 固定黑色的 StatusBarStyle，用于亮色背景，作为 -preferredStatusBarStyle 方法的 return 值使用。
+#define QMUIStatusBarStyleDarkContent [QMUIHelper statusBarStyleDarkContent]
 
 #define StringFromBOOL(_flag) (_flag ? @"YES" : @"NO")
 

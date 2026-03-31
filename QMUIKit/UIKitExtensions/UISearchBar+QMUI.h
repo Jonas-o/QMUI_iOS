@@ -55,6 +55,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// 这个属性用于控制这种行为在 UISearchBar 里是否生效，默认为 YES，置为 NO 则可确保 UISearchBar 的布局在 indexBar 显示、隐藏时均保持一致，不产生跳动。弊端是如果屏幕较矮，且 indexBar 内容较多，则 searchBar 输入框右侧可能与 indexBar 产生重叠，请知悉。
 @property(nonatomic, assign) BOOL qmui_adjustTextFieldLayoutForIndexBar;
 
+/// 获取 searchBar 内部的输入框的引用，在 searchBar 初始化完即可被获取
+@property(nullable, nonatomic, weak, readonly) UITextField *qmui_textField;
+
 /// 获取 searchBar 的背景 view，为一个 UIImageView 的子类 UISearchBarBackground，在 searchBar 初始化完即可被获取
 @property(nullable, nonatomic, weak, readonly) UIView *qmui_backgroundView;
 

@@ -145,9 +145,11 @@ QMUISynthesizeCGFloatProperty(lastKeyboardHeight, setLastKeyboardHeight)
 
 + (CGFloat)keyboardHeightWithNotification:(nullable NSNotification *)notification inView:(nullable UIView *)view {
     CGRect keyboardRect = [self keyboardRectWithNotification:notification];
-    // iOS 13 分屏键盘 x 不是 0，不知道是系统 BUG 还是故意这样，先这样保护，再观察一下后面的 beta 版本
-    if (IS_SPLIT_SCREEN_IPAD && keyboardRect.origin.x > 0) {
-        keyboardRect.origin.x = 0;
+    if (@available(iOS 13.0, *)) {
+        // iOS 13 分屏键盘 x 不是 0，不知道是系统 BUG 还是故意这样，先这样保护，再观察一下后面的 beta 版本
+        if (IS_SPLIT_SCREEN_IPAD && keyboardRect.origin.x > 0) {
+            keyboardRect.origin.x = 0;
+        }
     }
     if (!view) { return CGRectGetHeight(keyboardRect); }
     CGRect keyboardRectInView = [view convertRect:keyboardRect fromCoordinateSpace:UIScreen.mainScreen.coordinateSpace];
@@ -528,7 +530,10 @@ static NSInteger isSimulator = -1;
     if (@available(iOS 14.0, *)) {
         return [NSProcessInfo processInfo].isiOSAppOnMac || [NSProcessInfo processInfo].isMacCatalystApp;
     }
-    return [NSProcessInfo processInfo].isMacCatalystApp;
+    if (@available(iOS 13.0, *)) {
+        return [NSProcessInfo processInfo].isMacCatalystApp;
+    }
+    return NO;
 }
 
 static NSInteger isNotchedScreen = -1;
@@ -1145,6 +1150,13 @@ static NSInteger isHighPerformanceDevice = -1;
     UIWindow *window = UIApplication.sharedApplication.delegate.window;
     window.tintAdjustmentMode = UIViewTintAdjustmentModeAutomatic;
     [window tintColorDidChange];
+}
+
++ (UIStatusBarStyle)statusBarStyleDarkContent {
+    if (@available(iOS 13.0, *))
+        return UIStatusBarStyleDarkContent;
+    else
+        return UIStatusBarStyleDefault;
 }
 
 - (void)handleAppWillEnterForeground:(NSNotification *)notification {

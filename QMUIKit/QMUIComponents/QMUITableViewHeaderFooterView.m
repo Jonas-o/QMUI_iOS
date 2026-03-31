@@ -60,8 +60,7 @@
 - (void)updateAppearance {
     if (!QMUICMIActivated || (!self.parentTableView && !self.qmui_tableView) || self.type == QMUITableViewHeaderFooterViewTypeUnknow) return;
     
-    UITableViewStyle style = (self.parentTableView ?: self.qmui_tableView).style;
-    
+    UITableViewStyle style = (self.parentTableView ?: self.qmui_tableView).qmui_style;
     if (self.type == QMUITableViewHeaderFooterViewTypeHeader) {
         self.titleLabel.font = PreferredValueForTableViewStyle(style, TableViewSectionHeaderFont, TableViewGroupedSectionHeaderFont, TableViewInsetGroupedSectionHeaderFont);
         self.titleLabel.textColor = PreferredValueForTableViewStyle(style, TableViewSectionHeaderTextColor, TableViewGroupedSectionHeaderTextColor, TableViewInsetGroupedSectionHeaderTextColor);

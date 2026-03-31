@@ -318,37 +318,39 @@ NSString *const QMUICGColorOriginalColorBindKey = @"QMUICGColorOriginalColorBind
 @implementation UIColor (QMUI_DynamicColor)
 
 + (void)load {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        OverrideImplementation([UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
-            return [UIColor clearColor];
-        }].class, @selector(CGColor), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
-            return ^CGColorRef(UIColor *selfObject) {
-                // call super
-                CGColorRef (*originSelectorIMP)(id, SEL);
-                originSelectorIMP = (CGColorRef (*)(id, SEL))originalIMPProvider();
-                CGColorRef result = originSelectorIMP(selfObject, originCMD);
-                
-                if (selfObject.qmui_isDynamicColor) {
+    if (@available(iOS 13.0, *)) {
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            OverrideImplementation([UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
+                return [UIColor clearColor];
+            }].class, @selector(CGColor), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
+                return ^CGColorRef(UIColor *selfObject) {
+                    // call super
+                    CGColorRef (*originSelectorIMP)(id, SEL);
+                    originSelectorIMP = (CGColorRef (*)(id, SEL))originalIMPProvider();
+                    CGColorRef result = originSelectorIMP(selfObject, originCMD);
                     
-                    // copy
-                    UIColor *color = [UIColor colorWithCGColor:result];
+                    if (selfObject.qmui_isDynamicColor) {
+                        
+                        // copy
+                        UIColor *color = [UIColor colorWithCGColor:result];
+                        
+                        // CGColor 必须通过 CGColorCreate 创建。UIColor.CGColor 返回的是一个多对象复用的 CGColor 值（例如，如果 QMUIThemeA.light 值和 UIColorB 的值刚好相同，那么他们的 CGColor 可能也是同一个对象，所以 UIColorB.CGColor 可能会错误地使用了原本仅属于 QMUIThemeColorA 的 bindObject）
+                        // 经测试，qmui_red 系列接口适用于不同的 ColorSpace，应该是能放心使用的😜
+                        // https://github.com/Tencent/QMUI_iOS/issues/1463
+                        CGColorSpaceRef spaceRef = CGColorSpaceCreateDeviceRGB();
+                        result = CGColorCreate(spaceRef, (CGFloat[]){color.qmui_red, color.qmui_green, color.qmui_blue, color.qmui_alpha});
+                        CGColorSpaceRelease(spaceRef);
+                        
+                        [(__bridge id)(result) qmui_bindObject:selfObject forKey:QMUICGColorOriginalColorBindKey];
+                        return (CGColorRef)CFAutorelease(result);
+                    }
                     
-                    // CGColor 必须通过 CGColorCreate 创建。UIColor.CGColor 返回的是一个多对象复用的 CGColor 值（例如，如果 QMUIThemeA.light 值和 UIColorB 的值刚好相同，那么他们的 CGColor 可能也是同一个对象，所以 UIColorB.CGColor 可能会错误地使用了原本仅属于 QMUIThemeColorA 的 bindObject）
-                    // 经测试，qmui_red 系列接口适用于不同的 ColorSpace，应该是能放心使用的😜
-                    // https://github.com/Tencent/QMUI_iOS/issues/1463
-                    CGColorSpaceRef spaceRef = CGColorSpaceCreateDeviceRGB();
-                    result = CGColorCreate(spaceRef, (CGFloat[]){color.qmui_red, color.qmui_green, color.qmui_blue, color.qmui_alpha});
-                    CGColorSpaceRelease(spaceRef);
-                    
-                    [(__bridge id)(result) qmui_bindObject:selfObject forKey:QMUICGColorOriginalColorBindKey];
-                    return (CGColorRef)CFAutorelease(result);
-                }
-                
-                return result;
-            };
+                    return result;
+                };
+            });
         });
-    });
+    }
 }
 
 - (BOOL)qmui_isDynamicColor {
@@ -367,9 +369,13 @@ NSString *const QMUICGColorOriginalColorBindKey = @"QMUICGColorOriginalColorBind
 }
 
 - (UIColor *)qmui_rawColor {
-    if (self.qmui_isDynamicColor && [self respondsToSelector:@selector(resolvedColorWithTraitCollection:)]) {
-        UIColor *color = [self resolvedColorWithTraitCollection:UITraitCollection.currentTraitCollection];
-        return color.qmui_rawColor;
+    if (self.qmui_isDynamicColor) {
+        if (@available(iOS 13.0, *)) {
+            if ([self respondsToSelector:@selector(resolvedColorWithTraitCollection:)]) {
+                UIColor *color = [self resolvedColorWithTraitCollection:UITraitCollection.currentTraitCollection];
+                return color.qmui_rawColor;
+            }
+        }
     }
     return self;
 }
