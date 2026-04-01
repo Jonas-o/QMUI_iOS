@@ -39,7 +39,7 @@ QMUISynthesizeCGFloatProperty(qmui_originCornerRadius, setQmui_originCornerRadiu
         
         ExtendImplementationOfNonVoidMethodWithoutArguments([CALayer class], @selector(init), CALayer *, ^CALayer *(CALayer *selfObject, CALayer *originReturnValue) {
             selfObject.qmui_speedBeforePause = selfObject.speed;
-            selfObject.qmui_maskedCorners = QMUILayerAllCorner;
+            selfObject.maskedCorners = kCALayerMinXMinYCorner| kCALayerMaxXMinYCorner| kCALayerMinXMaxYCorner| kCALayerMaxXMaxYCorner;
             return originReturnValue;
         });
         
@@ -123,26 +123,6 @@ static char kAssociatedObjectKey_pause;
 
 - (BOOL)qmui_pause {
     return [((NSNumber *)objc_getAssociatedObject(self, &kAssociatedObjectKey_pause)) boolValue];
-}
-
-static char kAssociatedObjectKey_maskedCorners;
-- (void)setQmui_maskedCorners:(QMUICornerMask)qmui_maskedCorners {
-    BOOL maskedCornersChanged = qmui_maskedCorners != self.qmui_maskedCorners;
-    objc_setAssociatedObject(self, &kAssociatedObjectKey_maskedCorners, @(qmui_maskedCorners), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    self.maskedCorners = (CACornerMask)qmui_maskedCorners;
-    if (maskedCornersChanged) {
-        // 需要刷新border
-        if ([self.delegate respondsToSelector:@selector(layoutSublayersOfLayer:)]) {
-            UIView *view = (UIView *)self.delegate;
-            if (view.qmui_borderPosition > 0 && view.qmui_borderWidth > 0) {
-                [view.qmui_borderLayer setNeedsLayout];// 直接调用 layer 的 setNeedsLayout，没有线程限制，如果通过 view 调用则需要在主线程才行
-            }
-        }
-    }
-}
-
-- (QMUICornerMask)qmui_maskedCorners {
-    return [objc_getAssociatedObject(self, &kAssociatedObjectKey_maskedCorners) unsignedIntegerValue];
 }
 
 static char kAssociatedObjectKey_shadow;

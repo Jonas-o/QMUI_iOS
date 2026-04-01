@@ -177,8 +177,12 @@
         UIMenuController *menuController = [UIMenuController sharedMenuController];
         UIMenuItem *copyMenuItem = [[UIMenuItem alloc] initWithTitle:self.menuItemTitleForCopyAction ?: @"复制" action:@selector(copyString:)];
         [[UIMenuController sharedMenuController] setMenuItems:@[copyMenuItem]];
-        [menuController showMenuFromView:self.superview rect:self.frame];
-        
+        if (@available(iOS 13.0, *)) {
+            [menuController showMenuFromView:self.superview rect:self.frame];
+        } else {
+            [menuController setTargetRect:self.frame inView:self.superview];
+            [menuController setMenuVisible:YES animated:YES];
+        }
         self.highlighted = YES;
     } else if (gestureRecognizer.state == UIGestureRecognizerStatePossible) {
         self.highlighted = NO;

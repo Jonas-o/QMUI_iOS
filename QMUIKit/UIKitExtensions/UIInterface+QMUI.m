@@ -63,22 +63,22 @@ QMUISynthesizeNSIntegerProperty(lastOrientationChangedByHelper, setLastOrientati
         return YES;
     }
     if ((mask & UIInterfaceOrientationMaskAllButUpsideDown) == UIInterfaceOrientationMaskAllButUpsideDown) {
-        return UIInterfaceOrientationPortraitUpsideDown != deviceOrientation;
+        return UIDeviceOrientationPortraitUpsideDown != deviceOrientation;
     }
     if ((mask & UIInterfaceOrientationMaskPortrait) == UIInterfaceOrientationMaskPortrait) {
-        return UIInterfaceOrientationPortrait == deviceOrientation;
+        return UIDeviceOrientationPortrait == deviceOrientation;
     }
     if ((mask & UIInterfaceOrientationMaskLandscape) == UIInterfaceOrientationMaskLandscape) {
-        return UIInterfaceOrientationLandscapeLeft == deviceOrientation || UIInterfaceOrientationLandscapeRight == deviceOrientation;
+        return UIDeviceOrientationLandscapeLeft == deviceOrientation || UIDeviceOrientationLandscapeRight == deviceOrientation;
     }
     if ((mask & UIInterfaceOrientationMaskLandscapeLeft) == UIInterfaceOrientationMaskLandscapeLeft) {
-        return UIInterfaceOrientationLandscapeLeft == deviceOrientation;
+        return UIDeviceOrientationLandscapeLeft == deviceOrientation;
     }
     if ((mask & UIInterfaceOrientationMaskLandscapeRight) == UIInterfaceOrientationMaskLandscapeRight) {
-        return UIInterfaceOrientationLandscapeRight == deviceOrientation;
+        return UIDeviceOrientationLandscapeRight == deviceOrientation;
     }
     if ((mask & UIInterfaceOrientationMaskPortraitUpsideDown) == UIInterfaceOrientationMaskPortraitUpsideDown) {
-        return UIInterfaceOrientationPortraitUpsideDown == deviceOrientation;
+        return UIDeviceOrientationPortraitUpsideDown == deviceOrientation;
     }
     
     return YES;

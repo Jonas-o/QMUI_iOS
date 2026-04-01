@@ -85,7 +85,9 @@
     _containerView = [[UIView alloc] init];
     self.containerView.layer.cornerRadius = self.rootViewController.qmui_sheetPresentation.cornerRadius;
     self.containerView.layer.maskedCorners = kCALayerMinXMinYCorner|kCALayerMaxXMinYCorner;
-    self.containerView.layer.cornerCurve = kCACornerCurveContinuous;
+    if (@available(iOS 13.0, *)) {
+        self.containerView.layer.cornerCurve = kCACornerCurveContinuous;
+    }
     self.containerView.clipsToBounds = YES;
     [self.view addSubview:self.containerView];
     

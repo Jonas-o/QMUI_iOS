@@ -26,6 +26,7 @@
 #import <sys/utsname.h>
 
 NSString *const kQMUIResourcesBundleName = @"QMUIResources";
+static NSString * const kQMUIResourcesSwiftPMBundleName = @"QMUIKit_QMUIKit";
 
 @interface _QMUIPortraitViewController : UIViewController
 @end
@@ -54,6 +55,9 @@ NSString *const kQMUIResourcesBundleName = @"QMUIResources";
     if (!resourceBundle) {
         NSBundle *mainBundle = [NSBundle bundleForClass:self];
         NSString *resourcePath = [mainBundle pathForResource:kQMUIResourcesBundleName ofType:@"bundle"];
+        if (!resourcePath) {
+            resourcePath = [mainBundle pathForResource:kQMUIResourcesSwiftPMBundleName ofType:@"bundle"];
+        }
         resourceBundle = [NSBundle bundleWithPath:resourcePath] ?: mainBundle;
     }
     UIImage *image = [UIImage imageNamed:name inBundle:resourceBundle compatibleWithTraitCollection:nil];

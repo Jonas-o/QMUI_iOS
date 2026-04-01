@@ -26,7 +26,7 @@ if versionString.startswith('$'):
 publicHeaderFilePath = str(os.getenv('BUILT_PRODUCTS_DIR')) + '/' + os.getenv('PUBLIC_HEADERS_FOLDER_PATH') 
 print('umbrella creator: publicHeaderFilePath = ' + publicHeaderFilePath)
 umbrellaHeaderFileName = 'QMUIKit.h'
-umbrellaHeaderFilePath = str(os.getenv('SRCROOT')) + '/QMUIKit/' + umbrellaHeaderFileName
+umbrellaHeaderFilePath = str(os.getenv('SRCROOT')) + '/QMUIKit/include/QMUIKit/' + umbrellaHeaderFileName
 print('umbrella creator: umbrellaHeaderFilePath = ' + umbrellaHeaderFilePath)
 umbrellaFileContent = '''/**
  * Tencent is pleased to support the open source community by making QMUI_iOS available.
