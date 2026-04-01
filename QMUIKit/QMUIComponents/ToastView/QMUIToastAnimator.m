@@ -213,8 +213,8 @@
 }
 
 - (void)animationDidStop:(CAAnimation *)animation finished:(BOOL)flag {
-    if([[animation valueForKey:kSlideAnimationKey] isEqual:@"showContentView"] ||
-       [[animation valueForKey:kSlideAnimationKey] isEqual:@"hideContentView"]) {
+    if([[animation qmui_valueForKey:kSlideAnimationKey] isEqual:@"showContentView"] ||
+       [[animation qmui_valueForKey:kSlideAnimationKey] isEqual:@"hideContentView"]) {
         if (self.basicAnimationCompletion) {
             self.basicAnimationCompletion(flag);
         }

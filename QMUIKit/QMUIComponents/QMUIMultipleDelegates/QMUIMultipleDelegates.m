@@ -216,17 +216,17 @@
     NSPointerArray *delegates = [self.delegates copy];
     for (id delegate in delegates) {
         if ([delegate qmui_canGetValueForKey:key]) {
-            return [delegate valueForKey:key];
+            return [delegate qmui_valueForKey:key];
         }
     }
-    return [super valueForKey:key];
+    return [super qmui_valueForKey:key];
 }
 
 - (void)setValue:(id)value forKey:(NSString *)key {
     NSPointerArray *delegates = [self.delegates copy];
     for (id delegate in delegates) {
         if ([delegate qmui_canSetValueForKey:key]) {
-            [delegate setValue:value forKey:key];
+            [delegate qmui_setValue:value forKey:key];
         }
     }
 }

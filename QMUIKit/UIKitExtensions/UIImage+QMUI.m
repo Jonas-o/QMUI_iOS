@@ -96,7 +96,7 @@ static NSString * const kQMUIImageNameKey = @"kQMUIImageNameKey";
     if (name.length) {
         return name;
     }
-    UIImageAsset *asset = [self valueForKey:@"_imageAsset"];// UIImage.imageAsset 是懒加载的，如果当前 image 并非从 Asset 里获取的，直接访问 getter 也会导致它构造一个 UIImageAsset 对象出来，导致后续的 assetName 为随机字符串，所以这里通过 valueForKey: 的方式直接访问 Ivar
+    UIImageAsset *asset = [self qmui_valueForKey:@"_imageAsset"];// UIImage.imageAsset 是懒加载的，如果当前 image 并非从 Asset 里获取的，直接访问 getter 也会导致它构造一个 UIImageAsset 对象出来，导致后续的 assetName 为随机字符串，所以这里通过 valueForKey: 的方式直接访问 Ivar
     SEL selector = NSSelectorFromString(@"assetName");
     if ([asset respondsToSelector:selector]) {
         BeginIgnorePerformSelectorLeaksWarning

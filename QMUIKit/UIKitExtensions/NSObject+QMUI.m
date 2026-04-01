@@ -184,7 +184,7 @@
         obj = [[aClass alloc] initWithFrame:CGRectZero collectionViewLayout:UICollectionViewFlowLayout.new];
     } else if ([aClass isSubclassOfClass:[UIApplication class]]) {
         obj = UIApplication.sharedApplication;
-    } else {
+    } else if ([aClass instancesRespondToSelector:@selector(new)]) {
         obj = [aClass new];
     }
     [obj qmui_enumrateIvarsIncludingInherited:includingInherited usingBlock:block];
@@ -263,24 +263,40 @@
     if (@available(iOS 13.0, *)) {
         if ([self isKindOfClass:[UIView class]] && QMUICMIActivated && !IgnoreKVCAccessProhibited) {
             BeginIgnoreUIKVCAccessProhibited
-            id value = [self valueForKey:key];
+            id value = nil;
+            @try {
+                value = [self valueForKey:key];
+            } @catch (NSException *exception) {
+            }
             EndIgnoreUIKVCAccessProhibited
             return value;
         }
     }
-    return [self valueForKey:key];
+    @try {
+        return [self valueForKey:key];
+    } @catch (NSException *exception) {
+        return nil;
+    }
 }
 
 - (void)qmui_setValue:(id)value forKey:(NSString *)key {
     if (@available(iOS 13.0, *)) {
         if ([self isKindOfClass:[UIView class]] && QMUICMIActivated && !IgnoreKVCAccessProhibited) {
             BeginIgnoreUIKVCAccessProhibited
-            [self setValue:value forKey:key];
+            @try {
+                [self setValue:value forKey:key];
+            } @catch (NSException *exception) {
+                
+            }
             EndIgnoreUIKVCAccessProhibited
             return;
         }
     }
-    [self setValue:value forKey:key];
+    @try {
+        [self setValue:value forKey:key];
+    } @catch (NSException *exception) {
+        
+    }
 }
 
 - (BOOL)qmui_canGetValueForKey:(NSString *)key {
@@ -329,6 +345,16 @@
             }
         }
     }];
+    if (!result) {
+        [self qmui_enumrateIvarsIncludingInherited:YES usingBlock:^(Ivar ivar, NSString *ivarDescription) {
+            if (!result) {
+                NSString *ivarName = [NSString stringWithFormat:@"%s", ivar_getName(ivar)];
+                if ([ivars containsObject:ivarName]) {
+                    result = YES;
+                }
+            }
+        }];;
+    }
     return result;
 }
 

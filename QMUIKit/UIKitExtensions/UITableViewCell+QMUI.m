@@ -219,7 +219,7 @@ static char kAssociatedObjectKey_didAddToTableViewBlock;
 }
 
 - (UITableView *)qmui_tableView {
-    return [self valueForKey:@"_tableView"];
+    return [self qmui_valueForKey:@"_tableView"];
 }
 
 static char kAssociatedObjectKey_selectedBackgroundColor;

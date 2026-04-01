@@ -36,7 +36,7 @@
                 if (selfObject.window && [selfObject.superview isKindOfClass:NSClassFromString(@"UITransitionView")]) {
                     UIView *transitionView = selfObject.superview;
                     UISearchController *searchController = [selfObject qmui_viewController];
-                    UIViewController *sourceViewController = [searchController valueForKey:@"_modalSourceViewController"];
+                    UIViewController *sourceViewController = [searchController qmui_valueForKey:@"_modalSourceViewController"];
                     UINavigationController *navigationController = sourceViewController.navigationController;
                     if (navigationController.qmui_isPushing) {
                         BOOL isFromPreviousViewController = [sourceViewController qmui_isDescendantOfViewController:navigationController.topViewController.qmui_previousViewController];

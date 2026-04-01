@@ -21,7 +21,7 @@
 @implementation UITableViewHeaderFooterView (QMUI)
 
 - (UITableView *)qmui_tableView {
-    return [self valueForKey:@"tableView"];
+    return [self qmui_valueForKey:@"tableView"];
 }
 
 @end

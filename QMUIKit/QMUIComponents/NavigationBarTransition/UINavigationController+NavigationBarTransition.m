@@ -82,9 +82,16 @@ QMUISynthesizeIdStrongProperty(qmui_specifiedTextColor, setQmui_specifiedTextCol
     __block UILabel *backButtonLabel = nil;
     [self.qmui_contentView.subviews enumerateObjectsWithOptions:NSEnumerationReverse usingBlock:^(__kindof UIView * _Nonnull subview, NSUInteger idx, BOOL * _Nonnull stop) {
         if ([subview isKindOfClass:NSClassFromString(@"_UIButtonBarButton")]) {
-            UIButton *titleButton = [subview valueForKeyPath:@"visualProvider.titleButton"];
-            backButtonLabel = titleButton.titleLabel;
-            *stop = YES;
+            UIButton *titleButton = nil;
+            @try {
+                titleButton = [subview valueForKeyPath:@"visualProvider.titleButton"];
+            } @catch (NSException *exception) {
+                
+            }
+            if (titleButton) {
+                backButtonLabel = titleButton.titleLabel;
+                *stop = YES;
+            }
         }
     }];
     return backButtonLabel;

@@ -75,8 +75,8 @@ EndIgnoreClangWarning
     UIView *backgroundView = self.qmui_backgroundView;
     NSMutableArray<UIVisualEffectView *> *result = NSMutableArray.new;
     if (@available(iOS 13.0, *)) {
-        UIVisualEffectView *backgroundEffectView1 = [backgroundView valueForKey:@"_effectView1"];
-        UIVisualEffectView *backgroundEffectView2 = [backgroundView valueForKey:@"_effectView2"];
+        UIVisualEffectView *backgroundEffectView1 = [backgroundView qmui_valueForKey:@"_effectView1"];
+        UIVisualEffectView *backgroundEffectView2 = [backgroundView qmui_valueForKey:@"_effectView2"];
         if (backgroundEffectView1) {
             [result addObject:backgroundEffectView1];
         }

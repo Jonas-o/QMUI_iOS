@@ -302,10 +302,10 @@ NSString *const kShouldFixTitleViewBugKey = @"kShouldFixTitleViewBugKey";
                     if (!TabBarRemoveBackgroundEffectAutomatically && !TabBarUsesStandardAppearanceOnly && [selfObject.superview isKindOfClass:UITabBar.class]) return;
                     if (!ToolBarRemoveBackgroundEffectAutomatically && !ToolBarUsesStandardAppearanceOnly && [selfObject.superview isKindOfClass:UIToolbar.class]) return;
                     
-                    UIImageView *backgroundImageView1 = [selfObject valueForKey:@"_colorAndImageView1"];
-                    UIImageView *backgroundImageView2 = [selfObject valueForKey:@"_colorAndImageView2"];
-                    UIVisualEffectView *backgroundEffectView1 = [selfObject valueForKey:@"_effectView1"];
-                    UIVisualEffectView *backgroundEffectView2 = [selfObject valueForKey:@"_effectView2"];
+                    UIImageView *backgroundImageView1 = [selfObject qmui_valueForKey:@"_colorAndImageView1"];
+                    UIImageView *backgroundImageView2 = [selfObject qmui_valueForKey:@"_colorAndImageView2"];
+                    UIVisualEffectView *backgroundEffectView1 = [selfObject qmui_valueForKey:@"_effectView1"];
+                    UIVisualEffectView *backgroundEffectView2 = [selfObject qmui_valueForKey:@"_effectView2"];
                     
                     // iOS 14 系统默认特性是存在 backgroundImage 则不存在其他任何背景，但如果存在 barTintColor 则磨砂 view 也可以共存。
                     // iOS 15 系统默认特性是 backgroundImage、backgroundColor、backgroundEffect 三者都可以共存，其中前两者共用 _colorAndImageView，而我们这个开关为了符合 iOS 14 的特性，仅针对 _colorAndImageView 是因为 backgroundImage 存在而出现的情况做处理。
@@ -359,7 +359,11 @@ NSString *const kShouldFixTitleViewBugKey = @"kShouldFixTitleViewBugKey";
 }
 
 - (UIView *)qmui_contentView {
-    return [self valueForKeyPath:@"visualProvider.contentView"];
+    @try {
+        return [self valueForKeyPath:@"visualProvider.contentView"];
+    } @catch (NSException *exception) {
+        return nil;
+    }
 }
 
 - (void)qmuinb_fixTitleViewLayoutInIOS16 {

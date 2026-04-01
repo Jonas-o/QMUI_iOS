@@ -52,7 +52,7 @@
 - (id<CAAction>)actionForKey:(NSString *)event {
     if ([event isEqualToString:@"progress"] && self.shouldChangeProgressWithAnimation) {
         CABasicAnimation *animation = [CABasicAnimation animationWithKeyPath:event];
-        animation.fromValue = [self.presentationLayer valueForKey:event];
+        animation.fromValue = [self.presentationLayer qmui_valueForKey:event];
         animation.duration = self.progressAnimationDuration;
         return animation;
     }
