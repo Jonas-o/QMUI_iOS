@@ -242,6 +242,8 @@
 /// 持有KeyboardManager对象
 @property(nonatomic, strong) QMUIKeyboardManager *qmui_keyboardManager;
 
++ (id)qmui_findFirstResponder;
+
 @end
 
 @interface UITextField (QMUI_KeyboardManager)

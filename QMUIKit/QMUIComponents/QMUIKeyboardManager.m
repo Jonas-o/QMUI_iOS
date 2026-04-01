@@ -41,34 +41,6 @@
 
 @end
 
-
-@interface UIView (KeyboardManager)
-
-- (id)qmui_findFirstResponder;
-
-@end
-
-@implementation UIView (KeyboardManager)
-
-- (id)qmui_findFirstResponder {
-    if (self.isFirstResponder) {
-        return self;
-    }
-
-    for (UIView *subView in self.subviews) {
-        id responder = [subView qmui_findFirstResponder];
-
-        if (responder) {
-            return responder;
-        }
-    }
-
-    return nil;
-}
-
-@end
-
-
 @interface UIResponder ()
 
 /// 系统自己的isFirstResponder有延迟，这里手动记录UIResponder是否isFirstResponder，QMUIKeyboardManager内部自己使用
@@ -115,6 +87,48 @@ QMUISynthesizeBOOLProperty(keyboardManager_isFirstResponder, setKeyboardManager_
             };
         });
     });
+}
+
+static __weak id qmui_firstResponder;
+
++ (id)qmui_findFirstResponder {
+    qmui_firstResponder = nil;
+    // 通过将 target 设置为nil，让系统自动遍历响应链
+    // 从而响应链当前第一响应者响应我们自定义的方法
+    [[UIApplication sharedApplication] sendAction:@selector(qmui_findFirstResponder:)
+                                               to:nil
+                                             from:nil
+                                         forEvent:nil];
+    return qmui_firstResponder;
+    
+}
+
+- (void)qmui_findFirstResponder:(id)sender {
+    if (!self.isFirstResponder && [self isKindOfClass:UIView.class]) {
+        qmui_firstResponder = self.system_findFirstResponder ?: self;
+        return;
+    }
+    // 第一响应者会响应这个方法，并且将静态变量 cc_findFirstResponder 设置为自己
+    qmui_firstResponder = self;
+}
+
+- (id)system_findFirstResponder {
+    if (![self isKindOfClass:UIView.class]) {
+        return nil;
+    }
+    
+    if (self.isFirstResponder) {
+        return self;
+    }
+    
+    for (UIView *subView in [(UIView *)self subviews]) {
+        id responder = [subView system_findFirstResponder];
+        if (responder) {
+            return responder;
+        }
+    }
+    
+    return nil;
 }
 
 @end
@@ -434,21 +448,22 @@ static char kAssociatedObjectKey_KeyboardViewFrameObserver;
 }
 
 - (UIResponder *)firstResponderInWindows {
-    UIResponder *responder = [UIApplication.sharedApplication.keyWindow qmui_findFirstResponder];
+    return [UIResponder qmui_findFirstResponder];
+//    UIResponder *responder = [UIApplication.sharedApplication.keyWindow qmui_findFirstResponder];
+//
+//    if (!responder) {
+//        for (UIWindow *window in UIApplication.sharedApplication.windows) {
+//            if (window != UIApplication.sharedApplication.keyWindow) {
+//                responder = [window qmui_findFirstResponder];
+//
+//                if (responder) {
+//                    return responder;
+//                }
+//            }
+//        }
+//    }
 
-    if (!responder) {
-        for (UIWindow *window in UIApplication.sharedApplication.windows) {
-            if (window != UIApplication.sharedApplication.keyWindow) {
-                responder = [window qmui_findFirstResponder];
-
-                if (responder) {
-                    return responder;
-                }
-            }
-        }
-    }
-
-    return responder;
+//    return responder;
 }
 
 #pragma mark - Notification
@@ -934,6 +949,15 @@ static char kAssociatedObjectKey_KeyboardViewFrameObserver;
     }].subviews qmui_firstMatchWithBlock:^BOOL (__kindof UIView *_Nonnull subview) {
         return [NSStringFromClass(subview.class) isEqualToString:@"UIInputSetHostView"] && subview.subviews.count;
     }];
+
+    if (result == nil) {
+        // iOS 26 开始键盘的 view 换名字了
+        result = [[window.subviews qmui_firstMatchWithBlock:^BOOL (__kindof UIView *_Nonnull subview) {
+            return [NSStringFromClass(subview.class) isEqualToString:@"UITrackingWindowView"];
+        }].subviews qmui_firstMatchWithBlock:^BOOL (__kindof UIView *_Nonnull subview) {
+            return [NSStringFromClass(subview.class) isEqualToString:@"UIKeyboardItemContainerView"] && subview.subviews.count;
+        }];
+    }
 
     return result;
 }
