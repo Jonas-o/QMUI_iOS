@@ -248,10 +248,17 @@ NS_ASSUME_NONNULL_BEGIN
  */
 @property(class, nonatomic, readonly) UIScreen *preferredScreen;
 
+/// 具体查找实现见 `UIApplication (QMUI)` 的 `qmui_delegateWindow`，此处等价于 `[UIApplication.sharedApplication qmui_delegateWindow]`。
+@property(class, nonatomic, readonly, nullable) UIWindow *applicationDelegateWindow;
+
 /**
  查找当前 keyWindow。优先从已连接的 UIWindowScene 查找（iOS 15+ 优先 UIWindowScene.keyWindow）；若仍找不到，再依次尝试 UIApplication.keyWindow、遍历 windows、delegate.window（全系统版本通用兜底）。
+ 具体查找实现见 `UIApplication (QMUI)` 的 `qmui_keyWindow`，此处等价于 `[UIApplication.sharedApplication qmui_keyWindow]`。
  */
 @property(class, nonatomic, readonly, nullable) UIWindow *applicationKeyWindow;
+
+/// 具体查找实现见 `UIApplication (QMUI)` 的 `qmui_windows`，此处等价于 `[UIApplication.sharedApplication qmui_windows]`。
+@property(class, nonatomic, readonly, nullable) NSArray<__kindof UIWindow *> *applicationWindows;
 
 /**
  静态的状态栏高度，在状态栏不可见时也会根据机型返回状态栏的固定高度

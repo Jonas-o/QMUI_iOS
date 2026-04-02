@@ -47,15 +47,89 @@ QMUISynthesizeBOOLProperty(qmui_didFinishLaunching, setQmui_didFinishLaunching)
 }
 
 - (NSArray<__kindof UIWindow *> *)qmui_windows {
-    return QMUIHelper.applicationWindows;
+    __block NSArray *windows = nil;
+
+    if (@available(iOS 13.0, *)) {
+        [self.connectedScenes enumerateObjectsUsingBlock:^(UIScene *scene, BOOL *stop) {
+            if ([scene isKindOfClass:UIWindowScene.class] && [scene.session.role isEqualToString:UIWindowSceneSessionRoleApplication]) {
+                windows = [(UIWindowScene *)scene windows];
+                *stop = YES;
+            }
+        }];
+    }
+
+    if (!windows || windows.count == 0) {
+        BeginIgnoreDeprecatedWarning
+        windows = self.windows;
+        EndIgnoreDeprecatedWarning
+    }
+
+    return windows ?: @[];
 }
 
+/// 优先从 iOS 13+ 的 UIWindowScene 查找（iOS 15+ 优先 `UIWindowScene.keyWindow`）；找不到时统一用 `UIApplication.keyWindow`、遍历 `windows`、`delegate.window` 兜底（含 iOS 12 及以下仅走兜底）。
 - (nullable __kindof UIWindow *)qmui_keyWindow {
-    return QMUIHelper.applicationKeyWindow;
+    if (@available(iOS 13.0, *)) {
+        for (UIScene *scene in self.connectedScenes) {
+            if (![scene isKindOfClass:[UIWindowScene class]] || ![scene.session.role isEqualToString:UIWindowSceneSessionRoleApplication]) {
+                continue;
+            }
+
+            UIWindowScene *windowScene = (UIWindowScene *)scene;
+
+            if (@available(iOS 15.0, *)) {
+                UIWindow *keyWindow = windowScene.keyWindow;
+
+                if (keyWindow) {
+                    return keyWindow;
+                }
+            }
+
+            for (UIWindow *window in windowScene.windows) {
+                if (window.isKeyWindow && !window.isHidden) {
+                    return window;
+                }
+            }
+        }
+    }
+
+    BeginIgnoreDeprecatedWarning
+    UIWindow *key = self.keyWindow;
+
+    if (!key) {
+        for (UIWindow *window in self.windows) {
+            if (window.isKeyWindow) {
+                key = window;
+                break;
+            }
+        }
+    }
+
+    EndIgnoreDeprecatedWarning
+    return key ?: self.qmui_delegateWindow;
 }
 
 - (nullable __kindof UIWindow *)qmui_delegateWindow {
-    return QMUIHelper.applicationDelegateWindow;
+    UIWindow *delegateWindow = nil;
+
+    if (@available(iOS 13.0, *)) {
+        for (UIScene *scene in self.connectedScenes) {
+            if (![scene isKindOfClass:[UIWindowScene class]] || ![scene.session.role isEqualToString:UIWindowSceneSessionRoleApplication]) {
+                continue;
+            }
+
+            if ([scene.delegate respondsToSelector:@selector(window)]) {
+                delegateWindow = [scene.delegate performSelector:@selector(window)];
+                break;
+            }
+        }
+    }
+
+    if (!delegateWindow && [self.delegate respondsToSelector:@selector(window)]) {
+        delegateWindow = [self.delegate performSelector:@selector(window)];
+    }
+
+    return delegateWindow;
 }
 
 @end

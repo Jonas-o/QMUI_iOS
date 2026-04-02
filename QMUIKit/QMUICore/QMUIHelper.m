@@ -53,95 +53,6 @@ static UIScreen * QMUIPreferredScreen(void) {
     return screen;
 }
 
-static NSArray <UIWindow *> * QMUIApplicationWindows(void) {
-    __block NSArray *windows = nil;
-
-    if (@available(iOS 13.0, *)) {
-        [UIApplication.sharedApplication.connectedScenes enumerateObjectsUsingBlock:^(UIScene *scene, BOOL *stop) {
-            if ([scene isKindOfClass:UIWindowScene.class] && [scene.session.role isEqualToString:UIWindowSceneSessionRoleApplication]) {
-                windows = [(UIWindowScene *)scene windows];
-                *stop = YES;
-            }
-        }];
-    }
-
-    if (!windows || windows.count == 0) {
-        BeginIgnoreDeprecatedWarning
-            windows = UIApplication.sharedApplication.windows;
-        EndIgnoreDeprecatedWarning
-    }
-
-    return windows ?: @[];
-}
-
-static UIWindow * QMUIApplicationDelegateWindow(void) {
-    UIWindow *delegateWindow = nil;
-
-    if (@available(iOS 13.0, *)) {
-        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-            if (![scene isKindOfClass:[UIWindowScene class]] || ![scene.session.role isEqualToString:UIWindowSceneSessionRoleApplication]) {
-                continue;
-            }
-
-            if ([scene.delegate respondsToSelector:@selector(window)]) {
-                delegateWindow = [scene.delegate performSelector:@selector(window)];
-                break;
-            }
-        }
-    }
-
-    UIApplication *app = UIApplication.sharedApplication;
-
-    if (!delegateWindow && [app.delegate respondsToSelector:@selector(window)]) {
-        delegateWindow = [app.delegate performSelector:@selector(window)];
-    }
-
-    return delegateWindow;
-}
-
-/// 优先从 iOS 13+ 的 UIWindowScene 查找（iOS 15+ 优先 `UIWindowScene.keyWindow`）；找不到时统一用 `UIApplication.keyWindow`、遍历 `windows`、`delegate.window` 兜底（含 iOS 12 及以下仅走兜底）。
-static UIWindow * QMUIApplicationKeyWindow(void) {
-    if (@available(iOS 13.0, *)) {
-        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-            if (![scene isKindOfClass:[UIWindowScene class]] || ![scene.session.role isEqualToString:UIWindowSceneSessionRoleApplication]) {
-                continue;
-            }
-
-            UIWindowScene *windowScene = (UIWindowScene *)scene;
-
-            if (@available(iOS 15.0, *)) {
-                UIWindow *keyWindow = windowScene.keyWindow;
-
-                if (keyWindow) {
-                    return keyWindow;
-                }
-            }
-
-            for (UIWindow *window in windowScene.windows) {
-                if (window.isKeyWindow && !window.isHidden) {
-                    return window;
-                }
-            }
-        }
-    }
-
-    UIApplication *app = UIApplication.sharedApplication;
-    BeginIgnoreDeprecatedWarning
-    UIWindow *key = app.keyWindow;
-
-    if (!key) {
-        for (UIWindow *window in app.windows) {
-            if (window.isKeyWindow) {
-                key = window;
-                break;
-            }
-        }
-    }
-
-    EndIgnoreDeprecatedWarning
-    return key ?: QMUIApplicationDelegateWindow();
-}
-
 /// `deviceName` 前缀匹配；`iPhone 16`/`iPhone 17` 不与 `iPhone 16e`/`iPhone 17e` 同档。
 static BOOL QMUIDeviceNameHasPrefixExcludingEVariants(NSString *name, NSString *prefix) {
     if (!name.length || ![name hasPrefix:prefix]) {
@@ -408,7 +319,7 @@ static CGFloat pixelOne = -1.0f;
         CGFloat scale = 0;
 
         if (@available(iOS 13.0, *)) {
-            UIWindow *keyWindow = QMUIApplicationKeyWindow();
+            UIWindow *keyWindow = UIApplication.sharedApplication.qmui_keyWindow;
 
             if (keyWindow.traitCollection.displayScale > 0) {
                 scale = keyWindow.traitCollection.displayScale;
@@ -775,15 +686,15 @@ static NSInteger isIPhone = -1;
 }
 
 + (nullable UIWindow *)applicationDelegateWindow {
-    return QMUIApplicationDelegateWindow();
+    return UIApplication.sharedApplication.qmui_delegateWindow;
 }
 
 + (nullable UIWindow *)applicationKeyWindow {
-    return QMUIApplicationKeyWindow();
+    return UIApplication.sharedApplication.qmui_keyWindow;
 }
 
 + (NSArray<__kindof UIWindow *> *)applicationWindows {
-    return QMUIApplicationWindows();
+    return UIApplication.sharedApplication.qmui_windows;
 }
 
 static NSInteger isSimulator = -1;
@@ -1359,7 +1270,7 @@ static NSInteger isHighPerformanceDevice = -1;
 }
 
 + (CGSize)applicationSize {
-    UIWindow *keyWindow = QMUIApplicationKeyWindow();
+    UIWindow *keyWindow = UIApplication.sharedApplication.qmui_keyWindow;
 
     if (keyWindow) {
         return keyWindow.bounds.size;

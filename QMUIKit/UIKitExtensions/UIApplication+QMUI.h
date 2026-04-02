@@ -21,8 +21,11 @@ NS_ASSUME_NONNULL_BEGIN
 /// 判断当前的 App 是否已经完全启动
 @property(nonatomic, assign, readonly) BOOL qmui_didFinishLaunching;
 
+/// App 内 window 列表的统一获取入口（含 iOS 13+ WindowScene 与旧版兜底）。
 @property (nonatomic, readonly) NSArray<__kindof UIWindow *> *qmui_windows;
+/// 当前 keyWindow 的统一获取入口（含 WindowScene / keyWindow / windows / delegate.window 兜底）。
 @property (nullable, nonatomic, readonly) __kindof UIWindow *qmui_keyWindow;
+/// Scene delegate / App delegate 提供的 window 的统一获取入口。
 @property (nullable, nonatomic, readonly) __kindof UIWindow *qmui_delegateWindow;
 
 @end
