@@ -28,9 +28,6 @@ NS_ASSUME_NONNULL_BEGIN
 /// Scene delegate / App delegate 提供的 window 的统一获取入口。
 @property (nullable, nonatomic, readonly) __kindof UIWindow *qmui_delegateWindow;
 
-/// 优先从已连接的 UIWindowScene 取 UIScreen，无可用 scene 时回退主屏。用于替代 iOS 26+ 起废弃的 UIScreen.mainScreen。
-@property (nonatomic, readonly) UIScreen *qmui_preferredScreen;
-
 @end
 
 NS_ASSUME_NONNULL_END

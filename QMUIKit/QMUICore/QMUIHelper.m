@@ -31,6 +31,33 @@
 NSString *const kQMUIResourcesBundleName = @"QMUIResources";
 static NSString *const kQMUIResourcesSwiftPMBundleName = @"QMUIKit_QMUIKit";
 
+/// iOS 26+ 起 `UIScreen.mainScreen` 废弃，优先从已连接的 `UIWindowScene` 取 screen；无 scene 时回退主屏（保留旧行为）。
+/// App 未完成加载、`UIApplication.sharedApplication` 为 nil 时跳过 `connectedScenes`，直接回退 `[UIScreen mainScreen]`，不可放在 `UIApplication (QMUI)` 的实例方法里。
+static UIScreen *QMUIPreferredScreen(void) {
+    if (@available(iOS 13.0, *)) {
+        UIApplication *app = UIApplication.sharedApplication;
+
+        if (app) {
+            for (UIScene *scene in app.connectedScenes) {
+                if (![scene isKindOfClass:[UIWindowScene class]] || ![scene.session.role isEqualToString:UIWindowSceneSessionRoleApplication]) {
+                    continue;
+                }
+
+                UIWindowScene *windowScene = (UIWindowScene *)scene;
+
+                if (windowScene.screen) {
+                    return windowScene.screen;
+                }
+            }
+        }
+    }
+
+    BeginIgnoreDeprecatedWarning
+    UIScreen *screen = [UIScreen mainScreen];
+    EndIgnoreDeprecatedWarning
+    return screen;
+}
+
 /// `deviceName` 前缀匹配；`iPhone 16`/`iPhone 17` 不与 `iPhone 16e`/`iPhone 17e` 同档。
 static BOOL QMUIDeviceNameHasPrefixExcludingEVariants(NSString *name, NSString *prefix) {
     if (!name.length || ![name hasPrefix:prefix]) {
@@ -220,7 +247,7 @@ QMUISynthesizeCGFloatProperty(lastKeyboardHeight, setLastKeyboardHeight)
         return CGRectGetHeight(keyboardRect);
     }
 
-    id<UICoordinateSpace> keyboardCoordinateSpace = UIApplication.sharedApplication.qmui_preferredScreen.coordinateSpace;
+    id<UICoordinateSpace> keyboardCoordinateSpace = QMUIPreferredScreen().coordinateSpace;
 
     if (@available(iOS 13.0, *)) {
         UIWindowScene *windowScene = view.window.windowScene;
@@ -307,7 +334,7 @@ static CGFloat pixelOne = -1.0f;
         }
 
         if (scale <= 0) {
-            scale = UIApplication.sharedApplication.qmui_preferredScreen.scale;
+            scale = QMUIPreferredScreen().scale;
         }
 
         pixelOne = 1 / scale;
@@ -660,7 +687,7 @@ static NSInteger isIPhone = -1;
 }
 
 + (UIScreen *)preferredScreen {
-    return UIApplication.sharedApplication.qmui_preferredScreen;
+    return QMUIPreferredScreen();
 }
 
 + (nullable UIWindow *)applicationDelegateWindow {
@@ -713,7 +740,7 @@ static NSInteger isNotchedScreen = -1;
          */
         SEL peripheryInsetsSelector = NSSelectorFromString([NSString stringWithFormat:@"_%@%@", @"periphery", @"Insets"]);
         UIEdgeInsets peripheryInsets = UIEdgeInsetsZero;
-        [UIApplication.sharedApplication.qmui_preferredScreen qmui_performSelector:peripheryInsetsSelector withPrimitiveReturnValue:&peripheryInsets];
+        [QMUIPreferredScreen() qmui_performSelector:peripheryInsetsSelector withPrimitiveReturnValue:&peripheryInsets];
 
         if (peripheryInsets.bottom <= 0) {
             UIWindow *window = nil;
@@ -721,7 +748,7 @@ static NSInteger isNotchedScreen = -1;
             if (@available(iOS 13.0, *)) {
                 window = [UIWindow qmui_windowWithWindowScene:UIApplication.sharedApplication.qmui_delegateWindow.windowScene];
             } else {
-                window = [[UIWindow alloc] initWithFrame:UIApplication.sharedApplication.qmui_preferredScreen.bounds];
+                window = [[UIWindow alloc] initWithFrame:QMUIPreferredScreen().bounds];
             }
 
             peripheryInsets = window.safeAreaInsets;
@@ -1220,7 +1247,7 @@ static NSInteger isHighPerformanceDevice = -1;
         return NO;
     }
 
-    UIScreen *screen = UIApplication.sharedApplication.qmui_preferredScreen;
+    UIScreen *screen = QMUIPreferredScreen();
     CGFloat nativeScale = screen.nativeScale;
     CGFloat scale = screen.scale;
 
@@ -1274,7 +1301,7 @@ static NSInteger isHighPerformanceDevice = -1;
         return fromNewWindow;
     }
 
-    return UIApplication.sharedApplication.qmui_preferredScreen.bounds.size;
+    return QMUIPreferredScreen().bounds.size;
 }
 
 + (CGFloat)statusBarHeightConstant {

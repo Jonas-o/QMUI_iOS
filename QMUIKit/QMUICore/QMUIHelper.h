@@ -244,7 +244,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 /**
  优先从已连接的 UIWindowScene 取 UIScreen，无可用 scene 时回退主屏。用于替代 iOS 26+ 起废弃的 UIScreen.mainScreen。
- 具体查找实现见 `UIApplication (QMUI)` 的 `qmui_preferredScreen`，此处等价于 `[UIApplication.sharedApplication qmui_preferredScreen]`。
+ App 尚未完成加载、`UIApplication.sharedApplication` 尚不可用时，仍可用本方法（内部不依赖 `UIApplication` 实例）。
  */
 @property(class, nonatomic, readonly) UIScreen *preferredScreen;
 
