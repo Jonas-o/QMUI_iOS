@@ -291,6 +291,9 @@ NS_ASSUME_NONNULL_BEGIN
  */
 @property(class, nonatomic, assign, readonly) BOOL canUpdateAppearance;
 
+/// iOS 26 液态玻璃
+@property (class, nonatomic, readonly) BOOL isUsedLiquidGlass;
+
 @end
 
 @interface QMUIHelper (Animation)

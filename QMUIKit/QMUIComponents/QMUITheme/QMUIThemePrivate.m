@@ -95,19 +95,20 @@
                         }),
                             NSStringFromClass(UIToolbar.class):                  @[NSStringFromSelector(@selector(barTintColor)), ],
                             NSStringFromClass(UITabBar.class):                   ({
-                                NSMutableArray<NSString *> *result = @[
-                                    NSStringFromSelector(@selector(qmui_effect)),
-                                    NSStringFromSelector(@selector(qmui_effectForegroundColor)),
-                                ].mutableCopy;
+                            NSMutableArray<NSString *> *result = @[
+                                NSStringFromSelector(@selector(qmui_effect)),
+                                NSStringFromSelector(@selector(qmui_effectForegroundColor)),
+                            ].mutableCopy;
 
-                                if (@available(iOS 13.0, *)) {
-                                    // iOS 13 在 UITabBar (QMUI) 里对所有旧版接口都映射到 standardAppearance，所以重新设置一次 standardAppearance 就可以更新所有样式
-                                    [result addObject:NSStringFromSelector(@selector(standardAppearance))];
-                                } else {
-                                    [result addObjectsFromArray:@[NSStringFromSelector(@selector(barTintColor)),
-                                                                  NSStringFromSelector(@selector(unselectedItemTintColor)),
-                                                                  NSStringFromSelector(@selector(selectedImageTintColor)), ]];
-                                }
+                            if (@available(iOS 13.0, *)) {
+                                // iOS 13 在 UITabBar (QMUI) 里对所有旧版接口都映射到 standardAppearance，所以重新设置一次 standardAppearance 就可以更新所有样式
+                                [result addObject:NSStringFromSelector(@selector(standardAppearance))];
+                            } else {
+                                [result addObjectsFromArray:@[NSStringFromSelector(@selector(barTintColor)),
+                                                              NSStringFromSelector(@selector(unselectedItemTintColor)),
+                                                              NSStringFromSelector(@selector(selectedImageTintColor)), ]];
+                            }
+
                             result.copy;
                         }),
 
@@ -201,6 +202,7 @@
                 originSelectorIMP(selfObject, originCMD, tintColor);
             };
         });
+
         // iOS 12 及以下的版本，[UIView setBackgroundColor:] 并不会保存传进来的 color，所以要自己用个变量保存起来，不然 QMUIThemeColor 对象就会被丢弃
         if (@available(iOS 13.0, *)) {
         } else {
@@ -209,7 +211,7 @@
             });
             ExtendImplementationOfNonVoidMethodWithoutArguments([UIView class], @selector(backgroundColor), UIColor *, ^UIColor *(UIView *selfObject, UIColor *originReturnValue) {
                 UIColor *color = [selfObject qmui_getBoundObjectForKey:@"UIView(QMUIThemeCompatibility).backgroundColor"];
-                return color ?: originReturnValue;
+                return color ? : originReturnValue;
             });
         }
     });
@@ -230,20 +232,20 @@
                     if (tintColor.qmui_isQMUIDynamicColor && tintColor == selfObject.onTintColor) {
                         tintColor = tintColor.copy;
                     }
-                    
+
                     // call super
                     void (*originSelectorIMP)(id, SEL, UIColor *);
                     originSelectorIMP = (void (*)(id, SEL, UIColor *))originalIMPProvider();
                     originSelectorIMP(selfObject, originCMD, tintColor);
                 };
             });
-            
+
             OverrideImplementation([UISwitch class], @selector(setThumbTintColor:), ^id (__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
                 return ^(UISwitch *selfObject, UIColor *tintColor) {
                     if (tintColor.qmui_isQMUIDynamicColor && tintColor == selfObject.thumbTintColor) {
                         tintColor = tintColor.copy;
                     }
-                    
+
                     // call super
                     void (*originSelectorIMP)(id, SEL, UIColor *);
                     originSelectorIMP = (void (*)(id, SEL, UIColor *))originalIMPProvider();
@@ -438,6 +440,18 @@ QMUISynthesizeIdStrongProperty(qcl_originalShadowColor, setQcl_originalShadowCol
             };
         });
 
+        OverrideImplementation([UIView class], @selector(setBackgroundColor:), ^id (__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
+            return ^(UIView *selfObject, UIColor *backgroundColor) {
+                /// https://github.com/Tencent/QMUI_iOS/issues/1597
+                selfObject.layer.qcl_originalBackgroundColor = backgroundColor.qmui_isQMUIDynamicColor ? backgroundColor : nil;
+
+                // call super
+                void (*originSelectorIMP)(id, SEL, UIColor *);
+                originSelectorIMP = (void (*)(id, SEL, UIColor *))originalIMPProvider();
+                originSelectorIMP(selfObject, originCMD, backgroundColor);
+            };
+        });
+
         OverrideImplementation([CALayer class], @selector(setBorderColor:), ^id (__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
             return ^(CALayer *selfObject, CGColorRef color) {
                 UIColor *originalColor = [(__bridge id)(color) qmui_getBoundObjectForKey:QMUICGColorOriginalColorBindKey];
@@ -523,6 +537,7 @@ QMUISynthesizeIdStrongProperty(qcl_originalShadowColor, setQcl_originalShadowCol
                     // if (UITextFieldBorderView._image == image) return
                     // 由于 QMUIDynamicImage 随时可能发生图片的改变，这里要绕过这个判断：必须先清空一下 image，并马上调用 layoutIfNeeded 触发 -[UITextFieldBorderView setImage:] 使得 UITextFieldBorderView 内部的 image 清空，这样再设置新的才会生效。
                     originSelectorIMP(selfObject, originCMD, UIImage.new, state);
+
                     if (@available(iOS 13.0, *)) {
                         [selfObject.searchTextField setNeedsLayout];
                         [selfObject.searchTextField layoutIfNeeded];

@@ -13,64 +13,101 @@
 //  Created by QMUI Team on 14/10/25.
 //
 
-#import "QMUIHelper.h"
-#import "QMUICore.h"
-#import "NSNumber+QMUI.h"
-#import "UIViewController+QMUI.h"
-#import "NSString+QMUI.h"
-#import "UIInterface+QMUI.h"
-#import "NSObject+QMUI.h"
-#import "NSArray+QMUI.h"
 #import <AVFoundation/AVFoundation.h>
 #import <math.h>
 #import <sys/utsname.h>
+#import "NSArray+QMUI.h"
+#import "NSNumber+QMUI.h"
+#import "NSObject+QMUI.h"
+#import "NSString+QMUI.h"
+#import "QMUICommonDefines.h"
+#import "QMUICore.h"
+#import "QMUIHelper.h"
+#import "UIApplication+QMUI.h"
+#import "UIInterface+QMUI.h"
+#import "UIViewController+QMUI.h"
+#import "UIWindow+QMUI.h"
 
 NSString *const kQMUIResourcesBundleName = @"QMUIResources";
-static NSString * const kQMUIResourcesSwiftPMBundleName = @"QMUIKit_QMUIKit";
+static NSString *const kQMUIResourcesSwiftPMBundleName = @"QMUIKit_QMUIKit";
 
 /// iOS 26+ 起 `UIScreen.mainScreen` 废弃，优先从已连接的 `UIWindowScene` 取 screen；无 scene 时回退主屏（保留旧行为）。
-static UIScreen *QMUIPreferredScreen(void) {
+static UIScreen * QMUIPreferredScreen(void) {
     if (@available(iOS 13.0, *)) {
         for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-            if (![scene isKindOfClass:[UIWindowScene class]]) {
+            if (![scene isKindOfClass:[UIWindowScene class]] || ![scene.session.role isEqualToString:UIWindowSceneSessionRoleApplication]) {
                 continue;
             }
+
             UIWindowScene *windowScene = (UIWindowScene *)scene;
+
             if (windowScene.screen) {
                 return windowScene.screen;
             }
         }
     }
+
     BeginIgnoreDeprecatedWarning
     UIScreen *screen = [UIScreen mainScreen];
     EndIgnoreDeprecatedWarning
     return screen;
 }
 
-/// 优先从 iOS 13+ 的 UIWindowScene 查找（iOS 15+ 优先 `UIWindowScene.keyWindow`）；找不到时统一用 `UIApplication.keyWindow`、遍历 `windows`、`delegate.window` 兜底（含 iOS 12 及以下仅走兜底）。
-static UIWindow *QMUIApplicationKeyWindow(void) {
+static UIWindow * QMUIApplicationDelegateWindow(void) {
+    UIWindow *delegateWindow = nil;
+
     if (@available(iOS 13.0, *)) {
         for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-            if (![scene isKindOfClass:[UIWindowScene class]]) {
+            if (![scene isKindOfClass:[UIWindowScene class]] || ![scene.session.role isEqualToString:UIWindowSceneSessionRoleApplication]) {
                 continue;
             }
+
+            if ([scene.delegate respondsToSelector:@selector(window)]) {
+                delegateWindow = [scene.delegate performSelector:@selector(window)];
+                break;
+            }
+        }
+    }
+
+    UIApplication *app = UIApplication.sharedApplication;
+
+    if (!delegateWindow && [app.delegate respondsToSelector:@selector(window)]) {
+        delegateWindow = [app.delegate performSelector:@selector(window)];
+    }
+
+    return delegateWindow;
+}
+
+/// 优先从 iOS 13+ 的 UIWindowScene 查找（iOS 15+ 优先 `UIWindowScene.keyWindow`）；找不到时统一用 `UIApplication.keyWindow`、遍历 `windows`、`delegate.window` 兜底（含 iOS 12 及以下仅走兜底）。
+static UIWindow * QMUIApplicationKeyWindow(void) {
+    if (@available(iOS 13.0, *)) {
+        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+            if (![scene isKindOfClass:[UIWindowScene class]] || ![scene.session.role isEqualToString:UIWindowSceneSessionRoleApplication]) {
+                continue;
+            }
+
             UIWindowScene *windowScene = (UIWindowScene *)scene;
+
             if (@available(iOS 15.0, *)) {
                 UIWindow *keyWindow = windowScene.keyWindow;
+
                 if (keyWindow) {
                     return keyWindow;
                 }
             }
+
             for (UIWindow *window in windowScene.windows) {
-                if (window.isKeyWindow) {
+                if (window.isKeyWindow && !window.isHidden) {
                     return window;
                 }
             }
         }
     }
+
     UIApplication *app = UIApplication.sharedApplication;
     BeginIgnoreDeprecatedWarning
     UIWindow *key = app.keyWindow;
+
     if (!key) {
         for (UIWindow *window in app.windows) {
             if (window.isKeyWindow) {
@@ -79,8 +116,9 @@ static UIWindow *QMUIApplicationKeyWindow(void) {
             }
         }
     }
+
     EndIgnoreDeprecatedWarning
-    return key ?: app.delegate.window;
+    return key ? : QMUIApplicationDelegateWindow();
 }
 
 /// `deviceName` 前缀匹配；`iPhone 16`/`iPhone 17` 不与 `iPhone 16e`/`iPhone 17e` 同档。
@@ -88,19 +126,23 @@ static BOOL QMUIDeviceNameHasPrefixExcludingEVariants(NSString *name, NSString *
     if (!name.length || ![name hasPrefix:prefix]) {
         return NO;
     }
+
     if ([prefix isEqualToString:@"iPhone 16"] && [name hasPrefix:@"iPhone 16e"]) {
         return NO;
     }
+
     if ([prefix isEqualToString:@"iPhone 17"] && [name hasPrefix:@"iPhone 17e"]) {
         return NO;
     }
+
     return YES;
 }
 
 /// 灵动岛及同代标准版 / Air 等展示名前缀（与 statusBar 54、regular 宽度等语义一致）。
-static NSArray<NSString *> *QMUIDeviceNamePrefixesForIslandStyleIPhones(void) {
+static NSArray<NSString *> * QMUIDeviceNamePrefixesForIslandStyleIPhones(void) {
     static NSArray *prefixes;
     static dispatch_once_t onceToken;
+
     dispatch_once(&onceToken, ^{
         prefixes = @[
             @"iPhone 14 Pro",
@@ -115,11 +157,13 @@ static NSArray<NSString *> *QMUIDeviceNamePrefixesForIslandStyleIPhones(void) {
 
 static BOOL QMUIDeviceNameMatchesIslandStyleIPhonePrefixes(void) {
     NSString *name = [QMUIHelper deviceName];
+
     for (NSString *item in QMUIDeviceNamePrefixesForIslandStyleIPhones()) {
         if (QMUIDeviceNameHasPrefixExcludingEVariants(name, item)) {
             return YES;
         }
     }
+
     return NO;
 }
 
@@ -140,21 +184,25 @@ static BOOL QMUIDeviceNameMatchesIslandStyleIPhonePrefixes(void) {
 
 @interface QMUIHelper ()
 
-@property(nonatomic, assign) BOOL shouldPreventAppearanceUpdating;
+@property (nonatomic, assign) BOOL shouldPreventAppearanceUpdating;
 @end
 
 @implementation QMUIHelper (Bundle)
 
 + (UIImage *)imageWithName:(NSString *)name {
     static NSBundle *resourceBundle = nil;
+
     if (!resourceBundle) {
         NSBundle *mainBundle = [NSBundle bundleForClass:self];
         NSString *resourcePath = [mainBundle pathForResource:kQMUIResourcesBundleName ofType:@"bundle"];
+
         if (!resourcePath) {
             resourcePath = [mainBundle pathForResource:kQMUIResourcesSwiftPMBundleName ofType:@"bundle"];
         }
-        resourceBundle = [NSBundle bundleWithPath:resourcePath] ?: mainBundle;
+
+        resourceBundle = [NSBundle bundleWithPath:resourcePath] ? : mainBundle;
     }
+
     UIImage *image = [UIImage imageNamed:name inBundle:resourceBundle compatibleWithTraitCollection:nil];
     return image;
 }
@@ -166,8 +214,10 @@ static BOOL QMUIDeviceNameMatchesIslandStyleIPhonePrefixes(void) {
 
 + (NSNumber *)preferredContentSizeLevel {
     NSNumber *index = nil;
+
     if ([UIApplication instancesRespondToSelector:@selector(preferredContentSizeCategory)]) {
         NSString *contentSizeCategory = UIApplication.sharedApplication.preferredContentSizeCategory;
+
         if ([contentSizeCategory isEqualToString:UIContentSizeCategoryExtraSmall]) {
             index = [NSNumber numberWithInt:0];
         } else if ([contentSizeCategory isEqualToString:UIContentSizeCategorySmall]) {
@@ -192,20 +242,22 @@ static BOOL QMUIDeviceNameMatchesIslandStyleIPhonePrefixes(void) {
             index = [NSNumber numberWithInt:6];
         } else if ([contentSizeCategory isEqualToString:UIContentSizeCategoryAccessibilityExtraExtraExtraLarge]) {
             index = [NSNumber numberWithInt:6];
-        } else{
+        } else {
             index = [NSNumber numberWithInt:6];
         }
     } else {
         index = [NSNumber numberWithInt:3];
     }
-    
+
     return index;
 }
 
 + (CGFloat)heightForDynamicTypeCell:(NSArray *)heights {
     NSNumber *index = [QMUIHelper preferredContentSizeLevel];
+
     return [((NSNumber *)[heights objectAtIndex:[index intValue]]) qmui_CGFloatValue];
 }
+
 @end
 
 @implementation QMUIHelper (Keyboard)
@@ -224,6 +276,7 @@ QMUISynthesizeCGFloatProperty(lastKeyboardHeight, setLastKeyboardHeight)
 
 + (BOOL)isKeyboardVisible {
     BOOL visible = [QMUIHelper sharedInstance].keyboardVisible;
+
     return visible;
 }
 
@@ -234,6 +287,7 @@ QMUISynthesizeCGFloatProperty(lastKeyboardHeight, setLastKeyboardHeight)
 + (CGRect)keyboardRectWithNotification:(NSNotification *)notification {
     NSDictionary *userInfo = [notification userInfo];
     CGRect keyboardRect = [[userInfo objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue];
+
     // 注意iOS8以下的系统在横屏时得到的rect，宽度和高度相反了，所以不建议直接通过这个方法获取高度，而是使用<code>keyboardHeightWithNotification:inView:</code>，因为在后者的实现里会将键盘的rect转换坐标系，转换过程就会处理横竖屏旋转问题。
     return keyboardRect;
 }
@@ -244,20 +298,28 @@ QMUISynthesizeCGFloatProperty(lastKeyboardHeight, setLastKeyboardHeight)
 
 + (CGFloat)keyboardHeightWithNotification:(nullable NSNotification *)notification inView:(nullable UIView *)view {
     CGRect keyboardRect = [self keyboardRectWithNotification:notification];
+
     if (@available(iOS 13.0, *)) {
         // iOS 13 分屏键盘 x 不是 0，不知道是系统 BUG 还是故意这样，先这样保护，再观察一下后面的 beta 版本
         if (IS_SPLIT_SCREEN_IPAD && keyboardRect.origin.x > 0) {
             keyboardRect.origin.x = 0;
         }
     }
-    if (!view) { return CGRectGetHeight(keyboardRect); }
+
+    if (!view) {
+        return CGRectGetHeight(keyboardRect);
+    }
+
     id<UICoordinateSpace> keyboardCoordinateSpace = QMUIPreferredScreen().coordinateSpace;
+
     if (@available(iOS 13.0, *)) {
         UIWindowScene *windowScene = view.window.windowScene;
+
         if (windowScene) {
             keyboardCoordinateSpace = windowScene.screen.coordinateSpace;
         }
     }
+
     CGRect keyboardRectInView = [view convertRect:keyboardRect fromCoordinateSpace:keyboardCoordinateSpace];
     CGRect keyboardVisibleRectInView = CGRectIntersection(view.bounds, keyboardRectInView);
     CGFloat resultHeight = CGRectIsValidated(keyboardVisibleRectInView) ? CGRectGetHeight(keyboardVisibleRectInView) : 0;
@@ -267,17 +329,20 @@ QMUISynthesizeCGFloatProperty(lastKeyboardHeight, setLastKeyboardHeight)
 + (NSTimeInterval)keyboardAnimationDurationWithNotification:(NSNotification *)notification {
     NSDictionary *userInfo = [notification userInfo];
     NSTimeInterval animationDuration = [[userInfo objectForKey:UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+
     return animationDuration;
 }
 
 + (UIViewAnimationCurve)keyboardAnimationCurveWithNotification:(NSNotification *)notification {
     NSDictionary *userInfo = [notification userInfo];
     UIViewAnimationCurve curve = (UIViewAnimationCurve)[[userInfo objectForKey:UIKeyboardAnimationCurveUserInfoKey] integerValue];
+
     return curve;
 }
 
 + (UIViewAnimationOptions)keyboardAnimationOptionsWithNotification:(NSNotification *)notification {
-    UIViewAnimationOptions options = [QMUIHelper keyboardAnimationCurveWithNotification:notification]<<16;
+    UIViewAnimationOptions options = [QMUIHelper keyboardAnimationCurveWithNotification:notification] << 16;
+
     return options;
 }
 
@@ -290,6 +355,7 @@ QMUISynthesizeCGFloatProperty(lastKeyboardHeight, setLastKeyboardHeight)
     if (![[AVAudioSession sharedInstance].category isEqualToString:AVAudioSessionCategoryPlayAndRecord]) {
         return;
     }
+
     if (temporary) {
         [[AVAudioSession sharedInstance] overrideOutputAudioPort:speaker ? AVAudioSessionPortOverrideSpeaker : AVAudioSessionPortOverrideNone error:nil];
     } else {
@@ -298,17 +364,15 @@ QMUISynthesizeCGFloatProperty(lastKeyboardHeight, setLastKeyboardHeight)
 }
 
 + (void)setAudioSessionCategory:(nullable NSString *)category {
-    
     // 如果不属于系统category，返回
     if (category != AVAudioSessionCategoryAmbient &&
         category != AVAudioSessionCategorySoloAmbient &&
         category != AVAudioSessionCategoryPlayback &&
         category != AVAudioSessionCategoryRecord &&
-        category != AVAudioSessionCategoryPlayAndRecord)
-    {
+        category != AVAudioSessionCategoryPlayAndRecord) {
         return;
     }
-    
+
     [[AVAudioSession sharedInstance] setCategory:category error:nil];
 }
 
@@ -321,19 +385,24 @@ static CGFloat pixelOne = -1.0f;
 + (CGFloat)pixelOne {
     if (pixelOne < 0) {
         CGFloat scale = 0;
+
         if (@available(iOS 13.0, *)) {
             UIWindow *keyWindow = QMUIApplicationKeyWindow();
+
             if (keyWindow.traitCollection.displayScale > 0) {
                 scale = keyWindow.traitCollection.displayScale;
             } else if (UITraitCollection.currentTraitCollection.displayScale > 0) {
                 scale = UITraitCollection.currentTraitCollection.displayScale;
             }
         }
+
         if (scale <= 0) {
             scale = QMUIPreferredScreen().scale;
         }
+
         pixelOne = 1 / scale;
     }
+
     return pixelOne;
 }
 
@@ -349,6 +418,7 @@ static CGFloat pixelOne = -1.0f;
         QMUIAssert(NO, @"QMUIHelper (UIGraphic)", @"QMUI CGPostError, %@:%d %s, 非法的context：%@\n%@", [[NSString stringWithUTF8String:__FILE__] lastPathComponent], __LINE__, __PRETTY_FUNCTION__, context, [NSThread callStackSymbols]);
         return NO;
     }
+
     return YES;
 }
 
@@ -362,7 +432,7 @@ static CGFloat pixelOne = -1.0f;
         // 模拟器不返回物理机器信息，但会通过环境变量的方式返回
         return [NSString stringWithFormat:@"%s", getenv("SIMULATOR_MODEL_IDENTIFIER")];
     }
-    
+
     // 机型标识可参考 https://theapplewiki.com/wiki/Models 及 https://appledb.dev
     static dispatch_once_t onceToken;
     static NSString *model;
@@ -377,266 +447,274 @@ static CGFloat pixelOne = -1.0f;
 + (NSString *)deviceName {
     static dispatch_once_t onceToken;
     static NSString *name;
+
     dispatch_once(&onceToken, ^{
         NSString *model = [self deviceModel];
+
         if (!model) {
             name = @"Unknown Device";
             return;
         }
-        
+
         NSDictionary *dict = @{
-            // 维护时请对照 https://theapplewiki.com/wiki/Models 与 https://appledb.dev
-            @"iPhone1,1" : @"iPhone 1G",
-            @"iPhone1,2" : @"iPhone 3G",
-            @"iPhone2,1" : @"iPhone 3GS",
-            @"iPhone3,1" : @"iPhone 4 (GSM)",
-            @"iPhone3,2" : @"iPhone 4",
-            @"iPhone3,3" : @"iPhone 4 (CDMA)",
-            @"iPhone4,1" : @"iPhone 4S",
-            @"iPhone5,1" : @"iPhone 5",
-            @"iPhone5,2" : @"iPhone 5",
-            @"iPhone5,3" : @"iPhone 5c",
-            @"iPhone5,4" : @"iPhone 5c",
-            @"iPhone6,1" : @"iPhone 5s",
-            @"iPhone6,2" : @"iPhone 5s",
-            @"iPhone7,1" : @"iPhone 6 Plus",
-            @"iPhone7,2" : @"iPhone 6",
-            @"iPhone8,1" : @"iPhone 6s",
-            @"iPhone8,2" : @"iPhone 6s Plus",
-            @"iPhone8,4" : @"iPhone SE",
-            @"iPhone9,1" : @"iPhone 7",
-            @"iPhone9,2" : @"iPhone 7 Plus",
-            @"iPhone9,3" : @"iPhone 7",
-            @"iPhone9,4" : @"iPhone 7 Plus",
-            @"iPhone10,1" : @"iPhone 8",
-            @"iPhone10,2" : @"iPhone 8 Plus",
-            @"iPhone10,3" : @"iPhone X",
-            @"iPhone10,4" : @"iPhone 8",
-            @"iPhone10,5" : @"iPhone 8 Plus",
-            @"iPhone10,6" : @"iPhone X",
-            @"iPhone11,2" : @"iPhone XS",
-            @"iPhone11,4" : @"iPhone XS Max",
-            @"iPhone11,6" : @"iPhone XS Max CN",
-            @"iPhone11,8" : @"iPhone XR",
-            @"iPhone12,1" : @"iPhone 11",
-            @"iPhone12,3" : @"iPhone 11 Pro",
-            @"iPhone12,5" : @"iPhone 11 Pro Max",
-            @"iPhone12,8" : @"iPhone SE (2nd generation)",
-            @"iPhone13,1" : @"iPhone 12 mini",
-            @"iPhone13,2" : @"iPhone 12",
-            @"iPhone13,3" : @"iPhone 12 Pro",
-            @"iPhone13,4" : @"iPhone 12 Pro Max",
-            @"iPhone14,4" : @"iPhone 13 mini",
-            @"iPhone14,5" : @"iPhone 13",
-            @"iPhone14,2" : @"iPhone 13 Pro",
-            @"iPhone14,3" : @"iPhone 13 Pro Max",
-            @"iPhone14,7" : @"iPhone 14",
-            @"iPhone14,8" : @"iPhone 14 Plus",
-            @"iPhone15,2" : @"iPhone 14 Pro",
-            @"iPhone15,3" : @"iPhone 14 Pro Max",
-            @"iPhone15,4" : @"iPhone 15",
-            @"iPhone15,5" : @"iPhone 15 Plus",
-            @"iPhone16,1" : @"iPhone 15 Pro",
-            @"iPhone16,2" : @"iPhone 15 Pro Max",
-            @"iPhone17,1" : @"iPhone 16 Pro",
-            @"iPhone17,2" : @"iPhone 16 Pro Max",
-            @"iPhone17,3" : @"iPhone 16",
-            @"iPhone17,4" : @"iPhone 16 Plus",
-            @"iPhone17,5" : @"iPhone 16e",
-            @"iPhone18,1" : @"iPhone 17 Pro",
-            @"iPhone18,2" : @"iPhone 17 Pro Max",
-            @"iPhone18,3" : @"iPhone 17",
-            @"iPhone18,4" : @"iPhone Air",
-            @"iPhone18,5" : @"iPhone 17e",
-            
-            @"iPad1,1" : @"iPad 1",
-            @"iPad2,1" : @"iPad 2 (WiFi)",
-            @"iPad2,2" : @"iPad 2 (GSM)",
-            @"iPad2,3" : @"iPad 2 (CDMA)",
-            @"iPad2,4" : @"iPad 2",
-            @"iPad2,5" : @"iPad mini 1",
-            @"iPad2,6" : @"iPad mini 1",
-            @"iPad2,7" : @"iPad mini 1",
-            @"iPad3,1" : @"iPad 3 (WiFi)",
-            @"iPad3,2" : @"iPad 3 (4G)",
-            @"iPad3,3" : @"iPad 3 (4G)",
-            @"iPad3,4" : @"iPad 4",
-            @"iPad3,5" : @"iPad 4",
-            @"iPad3,6" : @"iPad 4",
-            @"iPad4,1" : @"iPad Air",
-            @"iPad4,2" : @"iPad Air",
-            @"iPad4,3" : @"iPad Air",
-            @"iPad4,4" : @"iPad mini 2",
-            @"iPad4,5" : @"iPad mini 2",
-            @"iPad4,6" : @"iPad mini 2",
-            @"iPad4,7" : @"iPad mini 3",
-            @"iPad4,8" : @"iPad mini 3",
-            @"iPad4,9" : @"iPad mini 3",
-            @"iPad5,1" : @"iPad mini 4",
-            @"iPad5,2" : @"iPad mini 4",
-            @"iPad5,3" : @"iPad Air 2",
-            @"iPad5,4" : @"iPad Air 2",
-            @"iPad6,3" : @"iPad Pro (9.7 inch)",
-            @"iPad6,4" : @"iPad Pro (9.7 inch)",
-            @"iPad6,7" : @"iPad Pro (12.9 inch)",
-            @"iPad6,8" : @"iPad Pro (12.9 inch)",
-            @"iPad6,11": @"iPad 5 (WiFi)",
-            @"iPad6,12": @"iPad 5 (Cellular)",
-            @"iPad7,1" : @"iPad Pro (12.9 inch, 2nd generation)",
-            @"iPad7,2" : @"iPad Pro (12.9 inch, 2nd generation)",
-            @"iPad7,3" : @"iPad Pro (10.5 inch)",
-            @"iPad7,4" : @"iPad Pro (10.5 inch)",
-            @"iPad7,5" : @"iPad 6 (WiFi)",
-            @"iPad7,6" : @"iPad 6 (Cellular)",
-            @"iPad7,11": @"iPad 7 (WiFi)",
-            @"iPad7,12": @"iPad 7 (Cellular)",
-            @"iPad8,1" : @"iPad Pro (11 inch)",
-            @"iPad8,2" : @"iPad Pro (11 inch)",
-            @"iPad8,3" : @"iPad Pro (11 inch)",
-            @"iPad8,4" : @"iPad Pro (11 inch)",
-            @"iPad8,5" : @"iPad Pro (12.9 inch, 3rd generation)",
-            @"iPad8,6" : @"iPad Pro (12.9 inch, 3rd generation)",
-            @"iPad8,7" : @"iPad Pro (12.9 inch, 3rd generation)",
-            @"iPad8,8" : @"iPad Pro (12.9 inch, 3rd generation)",
-            @"iPad8,9" : @"iPad Pro (11 inch, 2nd generation)",
-            @"iPad8,10" : @"iPad Pro (11 inch, 2nd generation)",
-            @"iPad8,11" : @"iPad Pro (12.9 inch, 4th generation)",
-            @"iPad8,12" : @"iPad Pro (12.9 inch, 4th generation)",
-            @"iPad11,1" : @"iPad mini (5th generation)",
-            @"iPad11,2" : @"iPad mini (5th generation)",
-            @"iPad11,3" : @"iPad Air (3rd generation)",
-            @"iPad11,4" : @"iPad Air (3rd generation)",
-            @"iPad11,6" : @"iPad (WiFi)",
-            @"iPad11,7" : @"iPad (Cellular)",
-            @"iPad13,18" : @"iPad (10th generation) (Wi-Fi)",
-            @"iPad13,19" : @"iPad (10th generation) (Wi-Fi+Cellular)",
-            @"iPad13,1" : @"iPad Air (4th generation)",
-            @"iPad13,2" : @"iPad Air (4th generation)",
-            @"iPad13,4" : @"iPad Pro (11 inch, 3rd generation)",
-            @"iPad13,5" : @"iPad Pro (11 inch, 3rd generation)",
-            @"iPad13,6" : @"iPad Pro (11 inch, 3rd generation)",
-            @"iPad13,7" : @"iPad Pro (11 inch, 3rd generation)",
-            @"iPad13,8" : @"iPad Pro (12.9 inch, 5th generation)",
-            @"iPad13,9" : @"iPad Pro (12.9 inch, 5th generation)",
-            @"iPad13,10" : @"iPad Pro (12.9 inch, 5th generation)",
-            @"iPad13,11" : @"iPad Pro (12.9 inch, 5th generation)",
-            @"iPad13,16" : @"iPad Air (5th generation)",
-            @"iPad13,17" : @"iPad Air (5th generation)",
-            @"iPad14,1" : @"iPad mini (6th generation)",
-            @"iPad14,2" : @"iPad mini (6th generation)",
-            @"iPad14,3" : @"iPad Pro 11-inch (4th generation)",
-            @"iPad14,4" : @"iPad Pro 11-inch (4th generation)",
-            @"iPad14,5" : @"iPad Pro 12.9-inch (6th generation)",
-            @"iPad14,6" : @"iPad Pro 12.9-inch (6th generation)",
-            @"iPad14,8" : @"iPad Air 11-inch (M2)",
-            @"iPad14,9" : @"iPad Air 11-inch (M2)",
-            @"iPad14,10" : @"iPad Air 13-inch (M2)",
-            @"iPad14,11" : @"iPad Air 13-inch (M2)",
-            @"iPad15,3" : @"iPad Air 11-inch (M3)",
-            @"iPad15,4" : @"iPad Air 11-inch (M3)",
-            @"iPad15,5" : @"iPad Air 13-inch (M3)",
-            @"iPad15,6" : @"iPad Air 13-inch (M3)",
-            @"iPad15,7" : @"iPad (A16) (Wi-Fi)",
-            @"iPad15,8" : @"iPad (A16) (Wi-Fi+Cellular)",
-            @"iPad16,3" : @"iPad Pro 11-inch (M4)",
-            @"iPad16,4" : @"iPad Pro 11-inch (M4)",
-            @"iPad16,5" : @"iPad Pro 13-inch (M4)",
-            @"iPad16,6" : @"iPad Pro 13-inch (M4)",
-            @"iPad16,8" : @"iPad Air 11-inch (M4)",
-            @"iPad16,9" : @"iPad Air 11-inch (M4)",
-            @"iPad16,10" : @"iPad Air 13-inch (M4)",
-            @"iPad16,11" : @"iPad Air 13-inch (M4)",
-            @"iPad17,1" : @"iPad Pro 11-inch (M5) (Wi-Fi)",
-            @"iPad17,2" : @"iPad Pro 11-inch (M5) (Wi-Fi+Cellular)",
-            @"iPad17,3" : @"iPad Pro 13-inch (M5) (Wi-Fi)",
-            @"iPad17,4" : @"iPad Pro 13-inch (M5) (Wi-Fi+Cellular)",
-            
-            @"iPod1,1" : @"iPod touch 1",
-            @"iPod2,1" : @"iPod touch 2",
-            @"iPod3,1" : @"iPod touch 3",
-            @"iPod4,1" : @"iPod touch 4",
-            @"iPod5,1" : @"iPod touch 5",
-            @"iPod7,1" : @"iPod touch 6",
-            @"iPod9,1" : @"iPod touch 7",
-            
-            @"i386" : @"Simulator x86",
-            @"x86_64" : @"Simulator x64",
-            
-            @"Watch1,1" : @"Apple Watch 38mm",
-            @"Watch1,2" : @"Apple Watch 42mm",
-            @"Watch2,3" : @"Apple Watch Series 2 38mm",
-            @"Watch2,4" : @"Apple Watch Series 2 42mm",
-            @"Watch2,6" : @"Apple Watch Series 1 38mm",
-            @"Watch2,7" : @"Apple Watch Series 1 42mm",
-            @"Watch3,1" : @"Apple Watch Series 3 38mm",
-            @"Watch3,2" : @"Apple Watch Series 3 42mm",
-            @"Watch3,3" : @"Apple Watch Series 3 38mm (LTE)",
-            @"Watch3,4" : @"Apple Watch Series 3 42mm (LTE)",
-            @"Watch4,1" : @"Apple Watch Series 4 40mm",
-            @"Watch4,2" : @"Apple Watch Series 4 44mm",
-            @"Watch4,3" : @"Apple Watch Series 4 40mm (LTE)",
-            @"Watch4,4" : @"Apple Watch Series 4 44mm (LTE)",
-            @"Watch5,1" : @"Apple Watch Series 5 40mm",
-            @"Watch5,2" : @"Apple Watch Series 5 44mm",
-            @"Watch5,3" : @"Apple Watch Series 5 40mm (LTE)",
-            @"Watch5,4" : @"Apple Watch Series 5 44mm (LTE)",
-            @"Watch5,9" : @"Apple Watch SE 40mm",
-            @"Watch5,10" : @"Apple Watch SE 44mm",
-            @"Watch5,11" : @"Apple Watch SE 40mm",
-            @"Watch5,12" : @"Apple Watch SE 44mm",
-            @"Watch6,1"  : @"Apple Watch Series 6 40mm",
-            @"Watch6,2"  : @"Apple Watch Series 6 44mm",
-            @"Watch6,3"  : @"Apple Watch Series 6 40mm",
-            @"Watch6,4"  : @"Apple Watch Series 6 44mm",
-            @"Watch6,6" : @"Apple Watch Series 7 41mm case (GPS)",
-            @"Watch6,7" : @"Apple Watch Series 7 45mm case (GPS)",
-            @"Watch6,8" : @"Apple Watch Series 7 41mm case (GPS+Cellular)",
-            @"Watch6,9" : @"Apple Watch Series 7 45mm case (GPS+Cellular)",
-            @"Watch6,10" : @"Apple Watch SE 40mm case (GPS)",
-            @"Watch6,11" : @"Apple Watch SE 44mm case (GPS)",
-            @"Watch6,12" : @"Apple Watch SE 40mm case (GPS+Cellular)",
-            @"Watch6,13" : @"Apple Watch SE 44mm case (GPS+Cellular)",
-            @"Watch6,14" : @"Apple Watch Series 8 41mm case (GPS)",
-            @"Watch6,15" : @"Apple Watch Series 8 45mm case (GPS)",
-            @"Watch6,16" : @"Apple Watch Series 8 41mm case (GPS+Cellular)",
-            @"Watch6,17" : @"Apple Watch Series 8 45mm case (GPS+Cellular)",
-            @"Watch6,18" : @"Apple Watch Ultra",
-            @"Watch7,1" : @"Apple Watch Series 9 41mm case (GPS)",
-            @"Watch7,2" : @"Apple Watch Series 9 45mm case (GPS)",
-            @"Watch7,3" : @"Apple Watch Series 9 41mm case (GPS+Cellular)",
-            @"Watch7,4" : @"Apple Watch Series 9 45mm case (GPS+Cellular)",
-            @"Watch7,5" : @"Apple Watch Ultra 2",
-            @"Watch7,8" : @"Apple Watch Series 10 42mm case (GPS)",
-            @"Watch7,9" : @"Apple Watch Series 10 46mm case (GPS)",
-            @"Watch7,10" : @"Apple Watch Series 10 42mm case (GPS+Cellular)",
-            @"Watch7,11" : @"Apple Watch Series 10 46mm case (GPS+Cellular)",
-            @"Watch7,12" : @"Apple Watch Ultra 3",
-            @"Watch7,13" : @"Apple Watch SE 3 40mm case (GPS)",
-            @"Watch7,14" : @"Apple Watch SE 3 44mm case (GPS)",
-            @"Watch7,15" : @"Apple Watch SE 3 40mm case (GPS+Cellular)",
-            @"Watch7,16" : @"Apple Watch SE 3 44mm case (GPS+Cellular)",
-            @"Watch7,17" : @"Apple Watch Series 11 42mm case (GPS)",
-            @"Watch7,18" : @"Apple Watch Series 11 46mm case (GPS)",
-            @"Watch7,19" : @"Apple Watch Series 11 42mm case (GPS+Cellular)",
-            @"Watch7,20" : @"Apple Watch Series 11 46mm case (GPS+Cellular)",
-            
-            @"AudioAccessory1,1" : @"HomePod",
-            @"AudioAccessory1,2" : @"HomePod",
-            @"AudioAccessory5,1" : @"HomePod mini",
-            
-            @"AirPods1,1" : @"AirPods (1st generation)",
-            @"AirPods2,1" : @"AirPods (2nd generation)",
-            @"iProd8,1"   : @"AirPods Pro",
-            
-            @"AppleTV2,1" : @"Apple TV 2",
-            @"AppleTV3,1" : @"Apple TV 3",
-            @"AppleTV3,2" : @"Apple TV 3",
-            @"AppleTV5,3" : @"Apple TV 4",
-            @"AppleTV6,2" : @"Apple TV 4K",
+                // 维护时请对照 https://theapplewiki.com/wiki/Models 与 https://appledb.dev
+                @"iPhone1,1": @"iPhone 1G",
+                @"iPhone1,2": @"iPhone 3G",
+                @"iPhone2,1": @"iPhone 3GS",
+                @"iPhone3,1": @"iPhone 4 (GSM)",
+                @"iPhone3,2": @"iPhone 4",
+                @"iPhone3,3": @"iPhone 4 (CDMA)",
+                @"iPhone4,1": @"iPhone 4S",
+                @"iPhone5,1": @"iPhone 5",
+                @"iPhone5,2": @"iPhone 5",
+                @"iPhone5,3": @"iPhone 5c",
+                @"iPhone5,4": @"iPhone 5c",
+                @"iPhone6,1": @"iPhone 5s",
+                @"iPhone6,2": @"iPhone 5s",
+                @"iPhone7,1": @"iPhone 6 Plus",
+                @"iPhone7,2": @"iPhone 6",
+                @"iPhone8,1": @"iPhone 6s",
+                @"iPhone8,2": @"iPhone 6s Plus",
+                @"iPhone8,4": @"iPhone SE",
+                @"iPhone9,1": @"iPhone 7",
+                @"iPhone9,2": @"iPhone 7 Plus",
+                @"iPhone9,3": @"iPhone 7",
+                @"iPhone9,4": @"iPhone 7 Plus",
+                @"iPhone10,1": @"iPhone 8",
+                @"iPhone10,2": @"iPhone 8 Plus",
+                @"iPhone10,3": @"iPhone X",
+                @"iPhone10,4": @"iPhone 8",
+                @"iPhone10,5": @"iPhone 8 Plus",
+                @"iPhone10,6": @"iPhone X",
+                @"iPhone11,2": @"iPhone XS",
+                @"iPhone11,4": @"iPhone XS Max",
+                @"iPhone11,6": @"iPhone XS Max CN",
+                @"iPhone11,8": @"iPhone XR",
+                @"iPhone12,1": @"iPhone 11",
+                @"iPhone12,3": @"iPhone 11 Pro",
+                @"iPhone12,5": @"iPhone 11 Pro Max",
+                @"iPhone12,8": @"iPhone SE (2nd generation)",
+                @"iPhone13,1": @"iPhone 12 mini",
+                @"iPhone13,2": @"iPhone 12",
+                @"iPhone13,3": @"iPhone 12 Pro",
+                @"iPhone13,4": @"iPhone 12 Pro Max",
+                @"iPhone14,4": @"iPhone 13 mini",
+                @"iPhone14,5": @"iPhone 13",
+                @"iPhone14,2": @"iPhone 13 Pro",
+                @"iPhone14,3": @"iPhone 13 Pro Max",
+                @"iPhone14,7": @"iPhone 14",
+                @"iPhone14,8": @"iPhone 14 Plus",
+                @"iPhone15,2": @"iPhone 14 Pro",
+                @"iPhone15,3": @"iPhone 14 Pro Max",
+                @"iPhone15,4": @"iPhone 15",
+                @"iPhone15,5": @"iPhone 15 Plus",
+                @"iPhone16,1": @"iPhone 15 Pro",
+                @"iPhone16,2": @"iPhone 15 Pro Max",
+                @"iPhone17,1": @"iPhone 16 Pro",
+                @"iPhone17,2": @"iPhone 16 Pro Max",
+                @"iPhone17,3": @"iPhone 16",
+                @"iPhone17,4": @"iPhone 16 Plus",
+                @"iPhone17,5": @"iPhone 16e",
+                @"iPhone18,1": @"iPhone 17 Pro",
+                @"iPhone18,2": @"iPhone 17 Pro Max",
+                @"iPhone18,3": @"iPhone 17",
+                @"iPhone18,4": @"iPhone Air",
+                @"iPhone18,5": @"iPhone 17e",
+
+                @"iPad1,1": @"iPad 1",
+                @"iPad2,1": @"iPad 2 (WiFi)",
+                @"iPad2,2": @"iPad 2 (GSM)",
+                @"iPad2,3": @"iPad 2 (CDMA)",
+                @"iPad2,4": @"iPad 2",
+                @"iPad2,5": @"iPad mini 1",
+                @"iPad2,6": @"iPad mini 1",
+                @"iPad2,7": @"iPad mini 1",
+                @"iPad3,1": @"iPad 3 (WiFi)",
+                @"iPad3,2": @"iPad 3 (4G)",
+                @"iPad3,3": @"iPad 3 (4G)",
+                @"iPad3,4": @"iPad 4",
+                @"iPad3,5": @"iPad 4",
+                @"iPad3,6": @"iPad 4",
+                @"iPad4,1": @"iPad Air",
+                @"iPad4,2": @"iPad Air",
+                @"iPad4,3": @"iPad Air",
+                @"iPad4,4": @"iPad mini 2",
+                @"iPad4,5": @"iPad mini 2",
+                @"iPad4,6": @"iPad mini 2",
+                @"iPad4,7": @"iPad mini 3",
+                @"iPad4,8": @"iPad mini 3",
+                @"iPad4,9": @"iPad mini 3",
+                @"iPad5,1": @"iPad mini 4",
+                @"iPad5,2": @"iPad mini 4",
+                @"iPad5,3": @"iPad Air 2",
+                @"iPad5,4": @"iPad Air 2",
+                @"iPad6,3": @"iPad Pro (9.7 inch)",
+                @"iPad6,4": @"iPad Pro (9.7 inch)",
+                @"iPad6,7": @"iPad Pro (12.9 inch)",
+                @"iPad6,8": @"iPad Pro (12.9 inch)",
+                @"iPad6,11": @"iPad 5 (WiFi)",
+                @"iPad6,12": @"iPad 5 (Cellular)",
+                @"iPad7,1": @"iPad Pro (12.9 inch, 2nd generation)",
+                @"iPad7,2": @"iPad Pro (12.9 inch, 2nd generation)",
+                @"iPad7,3": @"iPad Pro (10.5 inch)",
+                @"iPad7,4": @"iPad Pro (10.5 inch)",
+                @"iPad7,5": @"iPad 6 (WiFi)",
+                @"iPad7,6": @"iPad 6 (Cellular)",
+                @"iPad7,11": @"iPad 7 (WiFi)",
+                @"iPad7,12": @"iPad 7 (Cellular)",
+                @"iPad8,1": @"iPad Pro (11 inch)",
+                @"iPad8,2": @"iPad Pro (11 inch)",
+                @"iPad8,3": @"iPad Pro (11 inch)",
+                @"iPad8,4": @"iPad Pro (11 inch)",
+                @"iPad8,5": @"iPad Pro (12.9 inch, 3rd generation)",
+                @"iPad8,6": @"iPad Pro (12.9 inch, 3rd generation)",
+                @"iPad8,7": @"iPad Pro (12.9 inch, 3rd generation)",
+                @"iPad8,8": @"iPad Pro (12.9 inch, 3rd generation)",
+                @"iPad8,9": @"iPad Pro (11 inch, 2nd generation)",
+                @"iPad8,10": @"iPad Pro (11 inch, 2nd generation)",
+                @"iPad8,11": @"iPad Pro (12.9 inch, 4th generation)",
+                @"iPad8,12": @"iPad Pro (12.9 inch, 4th generation)",
+                @"iPad11,1": @"iPad mini (5th generation)",
+                @"iPad11,2": @"iPad mini (5th generation)",
+                @"iPad11,3": @"iPad Air (3rd generation)",
+                @"iPad11,4": @"iPad Air (3rd generation)",
+                @"iPad11,6": @"iPad (WiFi)",
+                @"iPad11,7": @"iPad (Cellular)",
+                @"iPad13,18": @"iPad (10th generation) (Wi-Fi)",
+                @"iPad13,19": @"iPad (10th generation) (Wi-Fi+Cellular)",
+                @"iPad13,1": @"iPad Air (4th generation)",
+                @"iPad13,2": @"iPad Air (4th generation)",
+                @"iPad13,4": @"iPad Pro (11 inch, 3rd generation)",
+                @"iPad13,5": @"iPad Pro (11 inch, 3rd generation)",
+                @"iPad13,6": @"iPad Pro (11 inch, 3rd generation)",
+                @"iPad13,7": @"iPad Pro (11 inch, 3rd generation)",
+                @"iPad13,8": @"iPad Pro (12.9 inch, 5th generation)",
+                @"iPad13,9": @"iPad Pro (12.9 inch, 5th generation)",
+                @"iPad13,10": @"iPad Pro (12.9 inch, 5th generation)",
+                @"iPad13,11": @"iPad Pro (12.9 inch, 5th generation)",
+                @"iPad13,16": @"iPad Air (5th generation)",
+                @"iPad13,17": @"iPad Air (5th generation)",
+                @"iPad14,1": @"iPad mini (6th generation)",
+                @"iPad14,2": @"iPad mini (6th generation)",
+                @"iPad14,3": @"iPad Pro 11-inch (4th generation)",
+                @"iPad14,4": @"iPad Pro 11-inch (4th generation)",
+                @"iPad14,5": @"iPad Pro 12.9-inch (6th generation)",
+                @"iPad14,6": @"iPad Pro 12.9-inch (6th generation)",
+                @"iPad14,8": @"iPad Air 11-inch (M2)",
+                @"iPad14,9": @"iPad Air 11-inch (M2)",
+                @"iPad14,10": @"iPad Air 13-inch (M2)",
+                @"iPad14,11": @"iPad Air 13-inch (M2)",
+                @"iPad15,3": @"iPad Air 11-inch (M3)",
+                @"iPad15,4": @"iPad Air 11-inch (M3)",
+                @"iPad15,5": @"iPad Air 13-inch (M3)",
+                @"iPad15,6": @"iPad Air 13-inch (M3)",
+                @"iPad15,7": @"iPad (A16) (Wi-Fi)",
+                @"iPad15,8": @"iPad (A16) (Wi-Fi+Cellular)",
+                @"iPad16,3": @"iPad Pro 11-inch (M4)",
+                @"iPad16,4": @"iPad Pro 11-inch (M4)",
+                @"iPad16,5": @"iPad Pro 13-inch (M4)",
+                @"iPad16,6": @"iPad Pro 13-inch (M4)",
+                @"iPad16,8": @"iPad Air 11-inch (M4)",
+                @"iPad16,9": @"iPad Air 11-inch (M4)",
+                @"iPad16,10": @"iPad Air 13-inch (M4)",
+                @"iPad16,11": @"iPad Air 13-inch (M4)",
+                @"iPad17,1": @"iPad Pro 11-inch (M5) (Wi-Fi)",
+                @"iPad17,2": @"iPad Pro 11-inch (M5) (Wi-Fi+Cellular)",
+                @"iPad17,3": @"iPad Pro 13-inch (M5) (Wi-Fi)",
+                @"iPad17,4": @"iPad Pro 13-inch (M5) (Wi-Fi+Cellular)",
+
+                @"iPod1,1": @"iPod touch 1",
+                @"iPod2,1": @"iPod touch 2",
+                @"iPod3,1": @"iPod touch 3",
+                @"iPod4,1": @"iPod touch 4",
+                @"iPod5,1": @"iPod touch 5",
+                @"iPod7,1": @"iPod touch 6",
+                @"iPod9,1": @"iPod touch 7",
+
+                @"i386": @"Simulator x86",
+                @"x86_64": @"Simulator x64",
+
+                @"Watch1,1": @"Apple Watch 38mm",
+                @"Watch1,2": @"Apple Watch 42mm",
+                @"Watch2,3": @"Apple Watch Series 2 38mm",
+                @"Watch2,4": @"Apple Watch Series 2 42mm",
+                @"Watch2,6": @"Apple Watch Series 1 38mm",
+                @"Watch2,7": @"Apple Watch Series 1 42mm",
+                @"Watch3,1": @"Apple Watch Series 3 38mm",
+                @"Watch3,2": @"Apple Watch Series 3 42mm",
+                @"Watch3,3": @"Apple Watch Series 3 38mm (LTE)",
+                @"Watch3,4": @"Apple Watch Series 3 42mm (LTE)",
+                @"Watch4,1": @"Apple Watch Series 4 40mm",
+                @"Watch4,2": @"Apple Watch Series 4 44mm",
+                @"Watch4,3": @"Apple Watch Series 4 40mm (LTE)",
+                @"Watch4,4": @"Apple Watch Series 4 44mm (LTE)",
+                @"Watch5,1": @"Apple Watch Series 5 40mm",
+                @"Watch5,2": @"Apple Watch Series 5 44mm",
+                @"Watch5,3": @"Apple Watch Series 5 40mm (LTE)",
+                @"Watch5,4": @"Apple Watch Series 5 44mm (LTE)",
+                @"Watch5,9": @"Apple Watch SE 40mm",
+                @"Watch5,10": @"Apple Watch SE 44mm",
+                @"Watch5,11": @"Apple Watch SE 40mm",
+                @"Watch5,12": @"Apple Watch SE 44mm",
+                @"Watch6,1": @"Apple Watch Series 6 40mm",
+                @"Watch6,2": @"Apple Watch Series 6 44mm",
+                @"Watch6,3": @"Apple Watch Series 6 40mm",
+                @"Watch6,4": @"Apple Watch Series 6 44mm",
+                @"Watch6,6": @"Apple Watch Series 7 41mm case (GPS)",
+                @"Watch6,7": @"Apple Watch Series 7 45mm case (GPS)",
+                @"Watch6,8": @"Apple Watch Series 7 41mm case (GPS+Cellular)",
+                @"Watch6,9": @"Apple Watch Series 7 45mm case (GPS+Cellular)",
+                @"Watch6,10": @"Apple Watch SE 40mm case (GPS)",
+                @"Watch6,11": @"Apple Watch SE 44mm case (GPS)",
+                @"Watch6,12": @"Apple Watch SE 40mm case (GPS+Cellular)",
+                @"Watch6,13": @"Apple Watch SE 44mm case (GPS+Cellular)",
+                @"Watch6,14": @"Apple Watch Series 8 41mm case (GPS)",
+                @"Watch6,15": @"Apple Watch Series 8 45mm case (GPS)",
+                @"Watch6,16": @"Apple Watch Series 8 41mm case (GPS+Cellular)",
+                @"Watch6,17": @"Apple Watch Series 8 45mm case (GPS+Cellular)",
+                @"Watch6,18": @"Apple Watch Ultra",
+                @"Watch7,1": @"Apple Watch Series 9 41mm case (GPS)",
+                @"Watch7,2": @"Apple Watch Series 9 45mm case (GPS)",
+                @"Watch7,3": @"Apple Watch Series 9 41mm case (GPS+Cellular)",
+                @"Watch7,4": @"Apple Watch Series 9 45mm case (GPS+Cellular)",
+                @"Watch7,5": @"Apple Watch Ultra 2",
+                @"Watch7,8": @"Apple Watch Series 10 42mm case (GPS)",
+                @"Watch7,9": @"Apple Watch Series 10 46mm case (GPS)",
+                @"Watch7,10": @"Apple Watch Series 10 42mm case (GPS+Cellular)",
+                @"Watch7,11": @"Apple Watch Series 10 46mm case (GPS+Cellular)",
+                @"Watch7,12": @"Apple Watch Ultra 3",
+                @"Watch7,13": @"Apple Watch SE 3 40mm case (GPS)",
+                @"Watch7,14": @"Apple Watch SE 3 44mm case (GPS)",
+                @"Watch7,15": @"Apple Watch SE 3 40mm case (GPS+Cellular)",
+                @"Watch7,16": @"Apple Watch SE 3 44mm case (GPS+Cellular)",
+                @"Watch7,17": @"Apple Watch Series 11 42mm case (GPS)",
+                @"Watch7,18": @"Apple Watch Series 11 46mm case (GPS)",
+                @"Watch7,19": @"Apple Watch Series 11 42mm case (GPS+Cellular)",
+                @"Watch7,20": @"Apple Watch Series 11 46mm case (GPS+Cellular)",
+
+                @"AudioAccessory1,1": @"HomePod",
+                @"AudioAccessory1,2": @"HomePod",
+                @"AudioAccessory5,1": @"HomePod mini",
+
+                @"AirPods1,1": @"AirPods (1st generation)",
+                @"AirPods2,1": @"AirPods (2nd generation)",
+                @"iProd8,1": @"AirPods Pro",
+
+                @"AppleTV2,1": @"Apple TV 2",
+                @"AppleTV3,1": @"Apple TV 3",
+                @"AppleTV3,2": @"Apple TV 3",
+                @"AppleTV5,3": @"Apple TV 4",
+                @"AppleTV6,2": @"Apple TV 4K",
         };
         name = dict[model];
-        if (!name) name = model;
-        if (IS_SIMULATOR) name = [name stringByAppendingString:@" Simulator"];
+
+        if (!name) {
+            name = model;
+        }
+
+        if (IS_SIMULATOR) {
+            name = [name stringByAppendingString:@" Simulator"];
+        }
     });
     return name;
 }
@@ -647,6 +725,7 @@ static NSInteger isIPad = -1;
         // [[[UIDevice currentDevice] model] isEqualToString:@"iPad"] 无法判断模拟器 iPad，所以改为以下方式
         isIPad = UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad ? 1 : 0;
     }
+
     return isIPad > 0;
 }
 
@@ -656,6 +735,7 @@ static NSInteger isIPod = -1;
         NSString *string = [[UIDevice currentDevice] model];
         isIPod = [string rangeOfString:@"iPod touch"].location != NSNotFound ? 1 : 0;
     }
+
     return isIPod > 0;
 }
 
@@ -665,6 +745,7 @@ static NSInteger isIPhone = -1;
         NSString *string = [[UIDevice currentDevice] model];
         isIPhone = [string rangeOfString:@"iPhone"].location != NSNotFound ? 1 : 0;
     }
+
     return isIPhone > 0;
 }
 
@@ -685,17 +766,19 @@ static NSInteger isSimulator = -1;
         isSimulator = 0;
 #endif
     }
+
     return isSimulator > 0;
 }
-
 
 + (BOOL)isMac {
     if (@available(iOS 14.0, *)) {
         return [NSProcessInfo processInfo].isiOSAppOnMac || [NSProcessInfo processInfo].isMacCatalystApp;
     }
+
     if (@available(iOS 13.0, *)) {
         return [NSProcessInfo processInfo].isMacCatalystApp;
     }
+
     return NO;
 }
 
@@ -703,31 +786,43 @@ static NSInteger isNotchedScreen = -1;
 + (BOOL)isNotchedScreen {
     if (isNotchedScreen < 0) {
         /*
-         检测方式解释/测试要点：
-         1. iOS 11 与 iOS 12 可能行为不同，所以要分别测试。
-         2. 与触发 [QMUIHelper isNotchedScreen] 方法时的进程有关，例如 https://github.com/Tencent/QMUI_iOS/issues/482#issuecomment-456051738 里提到的 [NSObject performSelectorOnMainThread:withObject:waitUntilDone:NO] 就会导致较多的异常。
-         3. iOS 12 下，在非第2点里提到的情况下，iPhone、iPad 均可通过 UIScreen -_peripheryInsets 方法的返回值区分，但如果满足了第2点，则 iPad 无法使用这个方法，这种情况下要依赖第4点。
-         4. iOS 12 下，不管是否满足第2点，不管是什么设备类型，均可以通过一个满屏的 UIWindow 的 rootViewController.view.frame.origin.y 的值来区分，如果是非全面屏，这个值必定为20，如果是全面屏，则可能是24或44等不同的值。但由于创建 UIWindow、UIViewController 等均属于较大消耗，所以只在前面的步骤无法区分的情况下才会使用第4点。
-         5. 对于第4点，经测试与当前设备的方向、是否有勾选 project 里的 General - Hide status bar、当前是否处于来电模式的状态栏这些都没关系。
+           检测方式解释/测试要点：
+           1. iOS 11 与 iOS 12 可能行为不同，所以要分别测试。
+           2. 与触发 [QMUIHelper isNotchedScreen] 方法时的进程有关，例如 https://github.com/Tencent/QMUI_iOS/issues/482#issuecomment-456051738 里提到的 [NSObject performSelectorOnMainThread:withObject:waitUntilDone:NO] 就会导致较多的异常。
+           3. iOS 12 下，在非第2点里提到的情况下，iPhone、iPad 均可通过 UIScreen -_peripheryInsets 方法的返回值区分，但如果满足了第2点，则 iPad 无法使用这个方法，这种情况下要依赖第4点。
+           4. iOS 12 下，不管是否满足第2点，不管是什么设备类型，均可以通过一个满屏的 UIWindow 的 rootViewController.view.frame.origin.y 的值来区分，如果是非全面屏，这个值必定为20，如果是全面屏，则可能是24或44等不同的值。但由于创建 UIWindow、UIViewController 等均属于较大消耗，所以只在前面的步骤无法区分的情况下才会使用第4点。
+           5. 对于第4点，经测试与当前设备的方向、是否有勾选 project 里的 General - Hide status bar、当前是否处于来电模式的状态栏这些都没关系。
          */
         SEL peripheryInsetsSelector = NSSelectorFromString([NSString stringWithFormat:@"_%@%@", @"periphery", @"Insets"]);
         UIEdgeInsets peripheryInsets = UIEdgeInsetsZero;
         [QMUIPreferredScreen() qmui_performSelector:peripheryInsetsSelector withPrimitiveReturnValue:&peripheryInsets];
+
         if (peripheryInsets.bottom <= 0) {
-            UIWindow *window = [[UIWindow alloc] initWithFrame:QMUIPreferredScreen().bounds];
+            UIWindow *window = nil;
+
+            if (@available(iOS 13.0, *)) {
+                window = [UIWindow qmui_windowWithWindowScene:UIApplication.sharedApplication.qmui_delegateWindow.windowScene];
+            } else {
+                window = [[UIWindow alloc] initWithFrame:QMUIPreferredScreen().bounds];
+            }
+
             peripheryInsets = window.safeAreaInsets;
+
             if (peripheryInsets.bottom <= 0) {
                 // 使用一个强制竖屏的 rootViewController，避免一个仅支持竖屏的 App 在横屏启动时会受这里创建的 window 的影响，导致状态栏、safeAreaInsets 等错乱
                 // https://github.com/Tencent/QMUI_iOS/issues/1263
                 _QMUIPortraitViewController *viewController = [_QMUIPortraitViewController new];
                 window.rootViewController = viewController;
+
                 if (CGRectGetMinY(viewController.view.frame) > 20) {
                     peripheryInsets.bottom = 1;
                 }
             }
         }
+
         isNotchedScreen = peripheryInsets.bottom > 0 ? 1 : 0;
     }
+
     return isNotchedScreen > 0;
 }
 
@@ -735,6 +830,7 @@ static NSInteger isNotchedScreen = -1;
     if (QMUIDeviceNameMatchesIslandStyleIPhonePrefixes()) {
         return YES;
     }
+
     return [self isIPad] || (!IS_ZOOMEDMODE && ([self is67InchScreenAndiPhone14Later] || [self is67InchScreen] || [self is65InchScreen] || [self is61InchScreen] || [self is55InchScreen]));
 }
 
@@ -743,6 +839,7 @@ static NSInteger is69InchScreen = -1;
     if (is69InchScreen < 0) {
         is69InchScreen = CGSizeEqualToSize(CGSizeMake(DEVICE_WIDTH, DEVICE_HEIGHT), self.screenSizeFor69Inch) ? 1 : 0;
     }
+
     return is69InchScreen > 0;
 }
 
@@ -751,6 +848,7 @@ static NSInteger is67InchScreenAndiPhone14Later = -1;
     if (is67InchScreenAndiPhone14Later < 0) {
         is67InchScreenAndiPhone14Later = CGSizeEqualToSize(CGSizeMake(DEVICE_WIDTH, DEVICE_HEIGHT), self.screenSizeFor67InchAndiPhone14Later) ? 1 : 0;
     }
+
     return is67InchScreenAndiPhone14Later > 0;
 }
 
@@ -759,6 +857,7 @@ static NSInteger is67InchScreen = -1;
     if (is67InchScreen < 0) {
         is67InchScreen = CGSizeEqualToSize(CGSizeMake(DEVICE_WIDTH, DEVICE_HEIGHT), self.screenSizeFor67Inch) ? 1 : 0;
     }
+
     return is67InchScreen > 0;
 }
 
@@ -769,6 +868,7 @@ static NSInteger is65InchScreen = -1;
         // 由于 iPhone XS Max、iPhone 11 Pro Max 这两款机型和 iPhone XR 的屏幕宽高是一致的，我们通过机器 Identifier 加以区别
         is65InchScreen = (DEVICE_WIDTH == self.screenSizeFor65Inch.width && DEVICE_HEIGHT == self.screenSizeFor65Inch.height && !QMUIHelper.is61InchScreen) ? 1 : 0;
     }
+
     return is65InchScreen > 0;
 }
 
@@ -777,6 +877,7 @@ static NSInteger is63InchScreen = -1;
     if (is63InchScreen < 0) {
         is63InchScreen = CGSizeEqualToSize(CGSizeMake(DEVICE_WIDTH, DEVICE_HEIGHT), self.screenSizeFor63Inch) ? 1 : 0;
     }
+
     return is63InchScreen > 0;
 }
 
@@ -785,6 +886,7 @@ static NSInteger is61InchScreenAndiPhone14ProLater = -1;
     if (is61InchScreenAndiPhone14ProLater < 0) {
         is61InchScreenAndiPhone14ProLater = (DEVICE_WIDTH == self.screenSizeFor61InchAndiPhone14ProLater.width && DEVICE_HEIGHT == self.screenSizeFor61InchAndiPhone14ProLater.height) ? 1 : 0;
     }
+
     return is61InchScreenAndiPhone14ProLater > 0;
 }
 
@@ -793,6 +895,7 @@ static NSInteger is61InchScreenAndiPhone12Later = -1;
     if (is61InchScreenAndiPhone12Later < 0) {
         is61InchScreenAndiPhone12Later = (DEVICE_WIDTH == self.screenSizeFor61InchAndiPhone12Later.width && DEVICE_HEIGHT == self.screenSizeFor61InchAndiPhone12Later.height) ? 1 : 0;
     }
+
     return is61InchScreenAndiPhone12Later > 0;
 }
 
@@ -801,6 +904,7 @@ static NSInteger is61InchScreen = -1;
     if (is61InchScreen < 0) {
         is61InchScreen = (DEVICE_WIDTH == self.screenSizeFor61Inch.width && DEVICE_HEIGHT == self.screenSizeFor61Inch.height && ([[QMUIHelper deviceModel] isEqualToString:@"iPhone11,8"] || [[QMUIHelper deviceModel] isEqualToString:@"iPhone12,1"])) ? 1 : 0;
     }
+
     return is61InchScreen > 0;
 }
 
@@ -811,6 +915,7 @@ static NSInteger is58InchScreen = -1;
         // iPhone XS 和 iPhone X 的物理尺寸是一致的，因此无需比较机器 Identifier
         is58InchScreen = (DEVICE_WIDTH == self.screenSizeFor58Inch.width && DEVICE_HEIGHT == self.screenSizeFor58Inch.height) ? 1 : 0;
     }
+
     return is58InchScreen > 0;
 }
 
@@ -819,6 +924,7 @@ static NSInteger is55InchScreen = -1;
     if (is55InchScreen < 0) {
         is55InchScreen = (DEVICE_WIDTH == self.screenSizeFor55Inch.width && DEVICE_HEIGHT == self.screenSizeFor55Inch.height) ? 1 : 0;
     }
+
     return is55InchScreen > 0;
 }
 
@@ -827,6 +933,7 @@ static NSInteger is54InchScreen = -1;
     if (is54InchScreen < 0) {
         is54InchScreen = (DEVICE_WIDTH == self.screenSizeFor54Inch.width && DEVICE_HEIGHT == self.screenSizeFor54Inch.height) ? 1 : 0;
     }
+
     return is54InchScreen > 0;
 }
 
@@ -835,6 +942,7 @@ static NSInteger is47InchScreen = -1;
     if (is47InchScreen < 0) {
         is47InchScreen = (DEVICE_WIDTH == self.screenSizeFor47Inch.width && DEVICE_HEIGHT == self.screenSizeFor47Inch.height) ? 1 : 0;
     }
+
     return is47InchScreen > 0;
 }
 
@@ -843,6 +951,7 @@ static NSInteger is40InchScreen = -1;
     if (is40InchScreen < 0) {
         is40InchScreen = (DEVICE_WIDTH == self.screenSizeFor40Inch.width && DEVICE_HEIGHT == self.screenSizeFor40Inch.height) ? 1 : 0;
     }
+
     return is40InchScreen > 0;
 }
 
@@ -851,6 +960,7 @@ static NSInteger is35InchScreen = -1;
     if (is35InchScreen < 0) {
         is35InchScreen = (DEVICE_WIDTH == self.screenSizeFor35Inch.width && DEVICE_HEIGHT == self.screenSizeFor35Inch.height) ? 1 : 0;
     }
+
     return is35InchScreen > 0;
 }
 
@@ -917,8 +1027,9 @@ static CGFloat preferredLayoutWidth = -1;
                                         @([self screenSizeFor58Inch].width),
                                         @([self screenSizeFor40Inch].width)];
         preferredLayoutWidth = SCREEN_WIDTH;
-        UIWindow *window = UIApplication.sharedApplication.delegate.window ?: [[UIWindow alloc] init];// iOS 9 及以上的系统，新 init 出来的 window 自动被设置为当前 App 的宽度
+        UIWindow *window = UIApplication.sharedApplication.qmui_delegateWindow ? : [[UIWindow alloc] init];// iOS 9 及以上的系统，新 init 出来的 window 自动被设置为当前 App 的宽度
         CGFloat windowWidth = CGRectGetWidth(window.bounds);
+
         for (NSInteger i = 0; i < widths.count; i++) {
             if (windowWidth <= widths[i].qmui_CGFloatValue) {
                 preferredLayoutWidth = widths[i].qmui_CGFloatValue;
@@ -926,6 +1037,7 @@ static CGFloat preferredLayoutWidth = -1;
             }
         }
     }
+
     return preferredLayoutWidth;
 }
 
@@ -933,214 +1045,217 @@ static CGFloat preferredLayoutWidth = -1;
     if (![self isNotchedScreen]) {
         return UIEdgeInsetsZero;
     }
-    
+
     if ([self isIPad]) {
         return UIEdgeInsetsMake(24, 0, 20, 0);
     }
-    
+
     static NSDictionary<NSString *, NSDictionary<NSNumber *, NSValue *> *> *dict;
+
     if (!dict) {
         dict = @{
-            // iPhone 16 Pro
-            @"iPhone17,1": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(62, 0, 34, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 62, 21, 62)],
-            },
-            // iPhone 16 Pro Max
-            @"iPhone17,2": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(62, 0, 34, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 62, 21, 62)],
-            },
-            // iPhone 16
-            @"iPhone17,3": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(59, 0, 34, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 59, 21, 59)],
-            },
-            // iPhone 16 Plus
-            @"iPhone17,4": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(59, 0, 34, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 59, 21, 59)],
-            },
-            // iPhone 15
-            @"iPhone15,4": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(47, 0, 34, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 47, 21, 47)],
-            },
-            @"iPhone15,4-Zoom": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(48, 0, 28, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 48, 21, 48)],
-            },
-            // iPhone 15 Plus
-            @"iPhone15,5": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(47, 0, 34, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 47, 21, 47)],
-            },
-            @"iPhone15,5-Zoom": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(41, 0, 30, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 41, 21, 41)],
-            },
-            // iPhone 15 Pro
-            @"iPhone16,1": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(59, 0, 34, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 59, 21, 59)],
-            },
-            @"iPhone16,1-Zoom": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(48, 0, 28, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 48, 21, 48)],
-            },
-            // iPhone 15 Pro Max
-            @"iPhone16,2": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(59, 0, 34, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 59, 21, 59)],
-            },
-            @"iPhone16,2-Zoom": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(51, 0, 31, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 51, 21, 51)],
-            },
-            
-            // iPhone 14
-            @"iPhone14,7": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(47, 0, 34, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 47, 21, 47)],
-            },
-            @"iPhone14,7-Zoom": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(48, 0, 28, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 48, 21, 48)],
-            },
-            // iPhone 14 Plus
-            @"iPhone14,8": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(47, 0, 34, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 47, 21, 47)],
-            },
-            // iPhone 14 Plus
-            @"iPhone14,8-Zoom": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(41, 0, 30, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 41, 21, 41)],
-            },
-            // iPhone 14 Pro
-            @"iPhone15,2": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(59, 0, 34, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 59, 21, 59)],
-            },
-            @"iPhone15,2-Zoom": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(48, 0, 28, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 48, 21, 48)],
-            },
-            // iPhone 14 Pro Max
-            @"iPhone15,3": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(59, 0, 34, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 59, 21, 59)],
-            },
-            @"iPhone15,3-Zoom": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(51, 0, 31, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 51, 21, 51)],
-            },
-            
-            // iPhone 13 mini
-            @"iPhone14,4": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(50, 0, 34, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 50, 21, 50)],
-            },
-            @"iPhone14,4-Zoom": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(43, 0, 29, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 43, 21, 43)],
-            },
-            // iPhone 13
-            @"iPhone14,5": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(47, 0, 34, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 47, 21, 47)],
-            },
-            @"iPhone14,5-Zoom": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(39, 0, 28, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 39, 21, 39)],
-            },
-            // iPhone 13 Pro
-            @"iPhone14,2": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(47, 0, 34, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 47, 21, 47)],
-            },
-            @"iPhone14,2-Zoom": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(39, 0, 28, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 39, 21, 39)],
-            },
-            // iPhone 13 Pro Max
-            @"iPhone14,3": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(47, 0, 34, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 47, 21, 47)],
-            },
-            @"iPhone14,3-Zoom": @{
-                @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(41, 0, 29 + 2.0 / 3.0, 0)],
-                @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 41, 21, 41)],
-            },
-            
-            
-            // iPhone 12 mini
-            @"iPhone13,1": @{
+                // iPhone 16 Pro
+                @"iPhone17,1": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(62, 0, 34, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 62, 21, 62)],
+                },
+                // iPhone 16 Pro Max
+                @"iPhone17,2": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(62, 0, 34, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 62, 21, 62)],
+                },
+                // iPhone 16
+                @"iPhone17,3": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(59, 0, 34, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 59, 21, 59)],
+                },
+                // iPhone 16 Plus
+                @"iPhone17,4": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(59, 0, 34, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 59, 21, 59)],
+                },
+                // iPhone 15
+                @"iPhone15,4": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(47, 0, 34, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 47, 21, 47)],
+                },
+                @"iPhone15,4-Zoom": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(48, 0, 28, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 48, 21, 48)],
+                },
+                // iPhone 15 Plus
+                @"iPhone15,5": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(47, 0, 34, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 47, 21, 47)],
+                },
+                @"iPhone15,5-Zoom": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(41, 0, 30, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 41, 21, 41)],
+                },
+                // iPhone 15 Pro
+                @"iPhone16,1": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(59, 0, 34, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 59, 21, 59)],
+                },
+                @"iPhone16,1-Zoom": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(48, 0, 28, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 48, 21, 48)],
+                },
+                // iPhone 15 Pro Max
+                @"iPhone16,2": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(59, 0, 34, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 59, 21, 59)],
+                },
+                @"iPhone16,2-Zoom": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(51, 0, 31, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 51, 21, 51)],
+                },
+
+                // iPhone 14
+                @"iPhone14,7": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(47, 0, 34, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 47, 21, 47)],
+                },
+                @"iPhone14,7-Zoom": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(48, 0, 28, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 48, 21, 48)],
+                },
+                // iPhone 14 Plus
+                @"iPhone14,8": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(47, 0, 34, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 47, 21, 47)],
+                },
+                // iPhone 14 Plus
+                @"iPhone14,8-Zoom": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(41, 0, 30, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 41, 21, 41)],
+                },
+                // iPhone 14 Pro
+                @"iPhone15,2": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(59, 0, 34, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 59, 21, 59)],
+                },
+                @"iPhone15,2-Zoom": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(48, 0, 28, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 48, 21, 48)],
+                },
+                // iPhone 14 Pro Max
+                @"iPhone15,3": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(59, 0, 34, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 59, 21, 59)],
+                },
+                @"iPhone15,3-Zoom": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(51, 0, 31, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 51, 21, 51)],
+                },
+
+                // iPhone 13 mini
+                @"iPhone14,4": @{
                     @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(50, 0, 34, 0)],
                     @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 50, 21, 50)],
-            },
-            @"iPhone13,1-Zoom": @{
+                },
+                @"iPhone14,4-Zoom": @{
                     @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(43, 0, 29, 0)],
                     @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 43, 21, 43)],
-            },
-            // iPhone 12
-            @"iPhone13,2": @{
+                },
+                // iPhone 13
+                @"iPhone14,5": @{
                     @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(47, 0, 34, 0)],
                     @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 47, 21, 47)],
-            },
-            @"iPhone13,2-Zoom": @{
+                },
+                @"iPhone14,5-Zoom": @{
                     @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(39, 0, 28, 0)],
                     @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 39, 21, 39)],
-            },
-            // iPhone 12 Pro
-            @"iPhone13,3": @{
+                },
+                // iPhone 13 Pro
+                @"iPhone14,2": @{
                     @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(47, 0, 34, 0)],
                     @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 47, 21, 47)],
-            },
-            @"iPhone13,3-Zoom": @{
+                },
+                @"iPhone14,2-Zoom": @{
                     @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(39, 0, 28, 0)],
                     @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 39, 21, 39)],
-            },
-            // iPhone 12 Pro Max
-            @"iPhone13,4": @{
+                },
+                // iPhone 13 Pro Max
+                @"iPhone14,3": @{
                     @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(47, 0, 34, 0)],
                     @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 47, 21, 47)],
-            },
-            @"iPhone13,4-Zoom": @{
+                },
+                @"iPhone14,3-Zoom": @{
                     @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(41, 0, 29 + 2.0 / 3.0, 0)],
                     @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 41, 21, 41)],
-            },
-            
-            
-            // iPhone 11
-            @"iPhone12,1": @{
+                },
+
+
+                // iPhone 12 mini
+                @"iPhone13,1": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(50, 0, 34, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 50, 21, 50)],
+                },
+                @"iPhone13,1-Zoom": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(43, 0, 29, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 43, 21, 43)],
+                },
+                // iPhone 12
+                @"iPhone13,2": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(47, 0, 34, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 47, 21, 47)],
+                },
+                @"iPhone13,2-Zoom": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(39, 0, 28, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 39, 21, 39)],
+                },
+                // iPhone 12 Pro
+                @"iPhone13,3": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(47, 0, 34, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 47, 21, 47)],
+                },
+                @"iPhone13,3-Zoom": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(39, 0, 28, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 39, 21, 39)],
+                },
+                // iPhone 12 Pro Max
+                @"iPhone13,4": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(47, 0, 34, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 47, 21, 47)],
+                },
+                @"iPhone13,4-Zoom": @{
+                    @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(41, 0, 29 + 2.0 / 3.0, 0)],
+                    @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 41, 21, 41)],
+                },
+
+
+                // iPhone 11
+                @"iPhone12,1": @{
                     @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(48, 0, 34, 0)],
                     @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 48, 21, 48)],
-            },
-            @"iPhone12,1-Zoom": @{
+                },
+                @"iPhone12,1-Zoom": @{
                     @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(44, 0, 31, 0)],
                     @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 44, 21, 44)],
-            },
-            // iPhone 11 Pro Max
-            @"iPhone12,5": @{
+                },
+                // iPhone 11 Pro Max
+                @"iPhone12,5": @{
                     @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(44, 0, 34, 0)],
                     @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 44, 21, 44)],
-            },
-            @"iPhone12,5-Zoom": @{
+                },
+                @"iPhone12,5-Zoom": @{
                     @(UIInterfaceOrientationPortrait): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(40, 0, 30 + 2.0 / 3.0, 0)],
                     @(UIInterfaceOrientationLandscapeLeft): [NSValue valueWithUIEdgeInsets:UIEdgeInsetsMake(0, 40, 21, 40)],
-            },
+                },
         };
     }
-    
+
     NSString *deviceKey = [QMUIHelper deviceModel];
+
     if (!dict[deviceKey]) {
         deviceKey = @"iPhone16,1";// 默认按最新的机型处理，因为新出的设备肯定更大概率与上一代设备相似
     }
+
     if ([QMUIHelper isZoomedMode]) {
         deviceKey = [NSString stringWithFormat:@"%@-Zoom", deviceKey];
     }
-    
+
     NSNumber *orientationKey = nil;
     UIInterfaceOrientation orientation = UIApplication.sharedApplication.statusBarOrientation;
     switch (orientation) {
@@ -1148,17 +1263,20 @@ static CGFloat preferredLayoutWidth = -1;
         case UIInterfaceOrientationLandscapeRight:
             orientationKey = @(UIInterfaceOrientationLandscapeLeft);
             break;
+
         default:
             orientationKey = @(UIInterfaceOrientationPortrait);
             break;
     }
-    
+
     UIEdgeInsets insets = dict[deviceKey][orientationKey].UIEdgeInsetsValue;
+
     if (orientation == UIInterfaceOrientationPortraitUpsideDown) {
         insets = UIEdgeInsetsMake(insets.bottom, insets.left, insets.top, insets.right);
     } else if (orientation == UIInterfaceOrientationLandscapeRight) {
         insets = UIEdgeInsetsMake(insets.top, insets.right, insets.bottom, insets.left);
     }
+
     return insets;
 }
 
@@ -1168,12 +1286,14 @@ static NSInteger isHighPerformanceDevice = -1;
         NSString *model = [QMUIHelper deviceModel];
         NSString *identifier = [model qmui_stringMatchedByPattern:@"\\d+"];
         NSInteger version = identifier.integerValue;
+
         if (IS_IPAD) {
             isHighPerformanceDevice = version >= 5 ? 1 : 0;// iPad Air 2
         } else {
             isHighPerformanceDevice = version >= 10 ? 1 : 0;// iPhone 8
         }
     }
+
     return isHighPerformanceDevice > 0;
 }
 
@@ -1181,23 +1301,27 @@ static NSInteger isHighPerformanceDevice = -1;
     if (!IS_IPHONE) {
         return NO;
     }
-    
+
     UIScreen *screen = QMUIPreferredScreen();
     CGFloat nativeScale = screen.nativeScale;
     CGFloat scale = screen.scale;
-    
+
     // 对于所有的 Plus 系列 iPhone，屏幕物理像素低于软件层面的渲染像素，不管标准模式还是放大模式，nativeScale 均小于 scale，所以需要特殊处理才能准确区分放大模式
     // https://www.paintcodeapp.com/news/ultimate-guide-to-iphone-resolutions
     BOOL shouldBeDownsampledDevice = CGSizeEqualToSize(screen.nativeBounds.size, CGSizeMake(1080, 1920));
+
     if (shouldBeDownsampledDevice) {
         scale /= 1.15;
     }
-    
+
     return nativeScale > scale;
 }
 
 + (BOOL)isDynamicIslandDevice {
-    if (!IS_IPHONE) return NO;
+    if (!IS_IPHONE) {
+        return NO;
+    }
+
     return QMUIDeviceNameMatchesIslandStyleIPhonePrefixes();
 }
 
@@ -1207,68 +1331,83 @@ static NSInteger isHighPerformanceDevice = -1;
 
 + (CGSize)applicationSize {
     UIWindow *keyWindow = QMUIApplicationKeyWindow();
+
     if (keyWindow) {
         return keyWindow.bounds.size;
     }
+
     if (@available(iOS 13.0, *)) {
         for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-            if (![scene isKindOfClass:[UIWindowScene class]]) {
+            if (![scene isKindOfClass:[UIWindowScene class]] || ![scene.session.role isEqualToString:UIWindowSceneSessionRoleApplication]) {
                 continue;
             }
+
             UIWindowScene *windowScene = (UIWindowScene *)scene;
+
             if (windowScene.windows.count > 0) {
                 return windowScene.windows.firstObject.bounds.size;
             }
         }
     }
+
     CGSize fromNewWindow = UIWindow.new.bounds.size;
+
     if (!CGSizeEqualToSize(fromNewWindow, CGSizeZero)) {
         return fromNewWindow;
     }
+
     return QMUIPreferredScreen().bounds.size;
 }
 
 + (CGFloat)statusBarHeightConstant {
     NSString *deviceModel = [QMUIHelper deviceModel];
-    
+
     if (!UIApplication.sharedApplication.statusBarHidden) {
         return UIApplication.sharedApplication.statusBarFrame.size.height;
     }
-    
+
     if (IS_IPAD) {
         return IS_NOTCHED_SCREEN ? 24 : 20;
     }
+
     if (!IS_NOTCHED_SCREEN) {
         return 20;
     }
+
     if (IS_LANDSCAPE) {
         return 0;
     }
+
     if ([deviceModel isEqualToString:@"iPhone12,1"]) {
         // iPhone 13 Mini
         return 48;
     }
+
     if (QMUIDeviceNameMatchesIslandStyleIPhonePrefixes()) {
         return 54;
     }
+
     if (IS_61INCH_SCREEN_AND_IPHONE12 || IS_67INCH_SCREEN) {
         return 47;
     }
+
     return (IS_54INCH_SCREEN && IOS_VERSION >= 15.0) ? 50 : 44;
 }
 
 + (CGFloat)navigationBarMaxYConstant {
     CGFloat result = QMUIHelper.statusBarHeightConstant;
+
     if (IS_IPAD) {
         result += 50;
     } else if (IS_LANDSCAPE) {
         result += PreferredValueForVisualDevice(44, 32);
     } else {
         result += 44;
+
         if ([@[
-            @"iPhone 16 Pro",
-            @"iPhone 17 Pro",
-        ] qmui_firstMatchWithBlock:^BOOL(NSString *item) {
+                 @"iPhone 16 Pro",
+                 @"iPhone 17 Pro",
+             ] qmui_firstMatchWithBlock:^BOOL (NSString *item) {
             return [QMUIHelper.deviceName hasPrefix:item];
         }]) {
             result += 2 + PixelOne;// 56.333
@@ -1276,6 +1415,7 @@ static NSInteger isHighPerformanceDevice = -1;
             result -= PixelOne;// 53.667
         }
     }
+
     return result;
 }
 
@@ -1284,22 +1424,25 @@ static NSInteger isHighPerformanceDevice = -1;
 @implementation QMUIHelper (UIApplication)
 
 + (void)dimmedApplicationWindow {
-    UIWindow *window = UIApplication.sharedApplication.delegate.window;
+    UIWindow *window = UIApplication.sharedApplication.qmui_delegateWindow;
+
     window.tintAdjustmentMode = UIViewTintAdjustmentModeDimmed;
     [window tintColorDidChange];
 }
 
 + (void)resetDimmedApplicationWindow {
-    UIWindow *window = UIApplication.sharedApplication.delegate.window;
+    UIWindow *window = UIApplication.sharedApplication.qmui_delegateWindow;
+
     window.tintAdjustmentMode = UIViewTintAdjustmentModeAutomatic;
     [window tintColorDidChange];
 }
 
 + (UIStatusBarStyle)statusBarStyleDarkContent {
-    if (@available(iOS 13.0, *))
+    if (@available(iOS 13.0, *)) {
         return UIStatusBarStyleDarkContent;
-    else
+    } else {
         return UIStatusBarStyleDefault;
+    }
 }
 
 - (void)handleAppWillEnterForeground:(NSNotification *)notification {
@@ -1313,10 +1456,32 @@ static NSInteger isHighPerformanceDevice = -1;
 + (BOOL)canUpdateAppearance {
     // 当配置表被触发时，尚未走到 handleAppDidFinishLaunching，而由于 Objective-C 的 BOOL 类型默认是 NO，所以这里刚好会返回 YES。至于 App 完全启动完成后，就由 notification 的回调来管理 shouldPreventAppearanceUpdating 的值。
     BOOL shouldPrevent = QMUIHelper.sharedInstance.shouldPreventAppearanceUpdating;
+
     if (shouldPrevent) {
         return NO;
     }
+
     return YES;
+}
+
++ (BOOL)isUsedLiquidGlass {
+    static BOOL result = NO;
+    static dispatch_once_t onceToken;
+
+    dispatch_once(&onceToken, ^{
+#ifdef IOS26_SDK_ALLOWED
+
+        if (@available(iOS 26.0, *)) {
+            result = ![[NSBundle.mainBundle objectForInfoDictionaryKey:@"UIDesignRequiresCompatibility"] boolValue];
+        } else {
+            result = NO;
+        }
+
+#else
+        result = NO;
+#endif
+    });
+    return result;
 }
 
 @end
@@ -1324,7 +1489,10 @@ static NSInteger isHighPerformanceDevice = -1;
 @implementation QMUIHelper (Animation)
 
 + (void)executeAnimationBlock:(__attribute__((noescape)) void (^)(void))animationBlock completionBlock:(__attribute__((noescape)) void (^)(void))completionBlock {
-    if (!animationBlock) return;
+    if (!animationBlock) {
+        return;
+    }
+
     [CATransaction begin];
     [CATransaction setCompletionBlock:completionBlock];
     animationBlock();
@@ -1338,15 +1506,15 @@ static NSInteger isHighPerformanceDevice = -1;
 + (NSInteger)numbericOSVersion {
     NSString *OSVersion = [[UIDevice currentDevice] systemVersion];
     NSArray *OSVersionArr = [OSVersion componentsSeparatedByString:@"."];
-    
+
     NSInteger numbericOSVersion = 0;
     NSInteger pos = 0;
-    
+
     while ([OSVersionArr count] > pos && pos < 3) {
         numbericOSVersion += ([[OSVersionArr objectAtIndex:pos] integerValue] * pow(10, (4 - pos * 2)));
         pos++;
     }
-    
+
     return numbericOSVersion;
 }
 
@@ -1370,11 +1538,13 @@ static NSInteger isHighPerformanceDevice = -1;
     CGFloat capHeightCenter = height + font.descender - font.capHeight / 2;
     CGFloat verticalCenter = height / 2;// 以这一点为中心点
     CGFloat baselineOffset = capHeightCenter - verticalCenter;
+
     // ≤ iOS 16.3.1 的设备上，1pt baseline 会让文本向上移动 2pt，≥ iOS 16.4 均为 1:1 移动。
     if (@available(iOS 16.4, *)) {
     } else {
         baselineOffset = baselineOffset / 2;
     }
+
     return baselineOffset;
 }
 
@@ -1384,6 +1554,7 @@ static NSInteger isHighPerformanceDevice = -1;
 
 + (void)load {
     static dispatch_once_t onceToken;
+
     dispatch_once(&onceToken, ^{
         [QMUIHelper sharedInstance];// 确保内部的变量、notification 都正确配置
     });
@@ -1392,25 +1563,26 @@ static NSInteger isHighPerformanceDevice = -1;
 + (instancetype)sharedInstance {
     static dispatch_once_t onceToken;
     static QMUIHelper *instance = nil;
-    dispatch_once(&onceToken,^{
+
+    dispatch_once(&onceToken, ^{
         instance = [[super allocWithZone:NULL] init];
         // 先设置默认值，不然可能变量的指针地址错误
         instance.keyboardVisible = NO;
         instance.lastKeyboardHeight = 0;
         instance.lastOrientationChangedByHelper = UIDeviceOrientationUnknown;
-        
+
         [[NSNotificationCenter defaultCenter] addObserver:instance selector:@selector(handleKeyboardWillShow:) name:UIKeyboardWillShowNotification object:nil];
         [[NSNotificationCenter defaultCenter] addObserver:instance selector:@selector(handleKeyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
         [[NSNotificationCenter defaultCenter] addObserver:instance selector:@selector(handleAppSizeWillChange:) name:QMUIAppSizeWillChangeNotification object:nil];
         [[NSNotificationCenter defaultCenter] addObserver:instance selector:@selector(handleDeviceOrientationNotification:) name:UIDeviceOrientationDidChangeNotification object:nil];
-        
+
         [[NSNotificationCenter defaultCenter] addObserver:instance selector:@selector(handleAppWillEnterForeground:) name:UIApplicationWillEnterForegroundNotification object:nil];
         [[NSNotificationCenter defaultCenter] addObserver:instance selector:@selector(handleAppEnterBackground:) name:UIApplicationDidEnterBackgroundNotification object:nil];
     });
     return instance;
 }
 
-+ (id)allocWithZone:(struct _NSZone *)zone{
++ (id)allocWithZone:(struct _NSZone *)zone {
     return [self sharedInstance];
 }
 
@@ -1421,36 +1593,42 @@ static NSInteger isHighPerformanceDevice = -1;
 
 static NSMutableSet<NSString *> *executedIdentifiers;
 + (BOOL)executeBlock:(void (NS_NOESCAPE ^)(void))block oncePerIdentifier:(NSString *)identifier {
-    if (!block || identifier.length <= 0) return NO;
+    if (!block || identifier.length <= 0) {
+        return NO;
+    }
+
     @synchronized (self) {
         if (!executedIdentifiers) {
             executedIdentifiers = NSMutableSet.new;
         }
+
         if (![executedIdentifiers containsObject:identifier]) {
             [executedIdentifiers addObject:identifier];
             block();
             return YES;
         }
+
         return NO;
     }
 }
 
 + (CALayerContentsGravity)layerContentsGravityWithContentMode:(UIViewContentMode)contentMode {
     NSDictionary<NSNumber *, CALayerContentsGravity> *relationship = @{
-        @(UIViewContentModeScaleToFill):        kCAGravityResize,
-        @(UIViewContentModeScaleAspectFit):     kCAGravityResizeAspect,
-        @(UIViewContentModeScaleAspectFill):    kCAGravityResizeAspectFill,
-        @(UIViewContentModeCenter):             kCAGravityCenter,
-        @(UIViewContentModeTop):                kCAGravityBottom,
-        @(UIViewContentModeBottom):             kCAGravityTop,
-        @(UIViewContentModeLeft):               kCAGravityLeft,
-        @(UIViewContentModeRight):              kCAGravityRight,
-        @(UIViewContentModeTopLeft):            kCAGravityBottomLeft,
-        @(UIViewContentModeTopRight):           kCAGravityBottomRight,
-        @(UIViewContentModeBottomLeft):         kCAGravityTopLeft,
-        @(UIViewContentModeBottomRight):        kCAGravityTopRight
+            @(UIViewContentModeScaleToFill):        kCAGravityResize,
+            @(UIViewContentModeScaleAspectFit):     kCAGravityResizeAspect,
+            @(UIViewContentModeScaleAspectFill):    kCAGravityResizeAspectFill,
+            @(UIViewContentModeCenter):             kCAGravityCenter,
+            @(UIViewContentModeTop):                kCAGravityBottom,
+            @(UIViewContentModeBottom):             kCAGravityTop,
+            @(UIViewContentModeLeft):               kCAGravityLeft,
+            @(UIViewContentModeRight):              kCAGravityRight,
+            @(UIViewContentModeTopLeft):            kCAGravityBottomLeft,
+            @(UIViewContentModeTopRight):           kCAGravityBottomRight,
+            @(UIViewContentModeBottomLeft):         kCAGravityTopLeft,
+            @(UIViewContentModeBottomRight):        kCAGravityTopRight
     };
-    return relationship[@(contentMode)] ?: kCAGravityCenter;
+
+    return relationship[@(contentMode)] ? : kCAGravityCenter;
 }
 
 @end
