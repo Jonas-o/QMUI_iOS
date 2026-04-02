@@ -109,6 +109,8 @@
     self.textView = [[QMUITextView alloc] init];
     self.textView.textContainerInset = UIEdgeInsetsMake(2, 0, 2, 0);
     self.textView.backgroundColor = [UIColor clearColor];
+    self.textView.layoutManager.usesFontLeading = NO;
+    self.textView.layoutManager.allowsNonContiguousLayout = NO;
     self.textView.scrollsToTop = NO;
     self.textView.editable = NO;
     self.textView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
