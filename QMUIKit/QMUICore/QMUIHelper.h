@@ -244,6 +244,16 @@ NS_ASSUME_NONNULL_BEGIN
 @property(class, nonatomic, readonly) CGSize applicationSize;
 
 /**
+ 优先从已连接的 UIWindowScene 取 UIScreen，无可用 scene 时回退主屏。用于替代 iOS 26+ 起废弃的 UIScreen.mainScreen。
+ */
+@property(class, nonatomic, readonly) UIScreen *preferredScreen;
+
+/**
+ 查找当前 keyWindow。优先从已连接的 UIWindowScene 查找（iOS 15+ 优先 UIWindowScene.keyWindow）；若仍找不到，再依次尝试 UIApplication.keyWindow、遍历 windows、delegate.window（全系统版本通用兜底）。
+ */
+@property(class, nonatomic, readonly, nullable) UIWindow *applicationKeyWindow;
+
+/**
  静态的状态栏高度，在状态栏不可见时也会根据机型返回状态栏的固定高度
  @NEW_DEVICE_CHECKER
  */

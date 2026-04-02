@@ -126,23 +126,33 @@
 /// 无论支不支持横屏，只要设备横屏了，就会返回YES
 #define IS_DEVICE_LANDSCAPE UIDeviceOrientationIsLandscape([[UIDevice currentDevice] orientation])
 
-/// 屏幕宽度，会根据横竖屏的变化而变化
-#define SCREEN_WIDTH ([[UIScreen mainScreen] bounds].size.width)
+#pragma mark - 布局尺寸宏（窗口 KeyWindow vs 显示屏 UIScreen）
 
-/// 屏幕高度，会根据横竖屏的变化而变化
-#define SCREEN_HEIGHT ([[UIScreen mainScreen] bounds].size.height)
+// MARK: 窗口 / KeyWindow（App 运行区域；`applicationSize`，优先 keyWindow / scene 内窗口等）
+/// 当前 key 窗口侧推得的 App 运行区域宽度，无需传入 view。与 `WINDOW_WIDTH_IN_VIEW` 不同：后者取指定 view 的 `window.bounds`，多窗口或非 key 时可能不一致。
+#define KEY_WINDOW_WIDTH [QMUIHelper applicationSize].width
+/// 当前 key 窗口侧推得的 App 运行区域高度。
+#define KEY_WINDOW_HEIGHT [QMUIHelper applicationSize].height
+/// 指定 view 所在 `window.bounds` 宽度；无 window 时回退 `KEY_WINDOW_WIDTH`。
+#define WINDOW_WIDTH_IN_VIEW(view) ((view).window ? (view).window.bounds.size.width : KEY_WINDOW_WIDTH)
+/// 指定 view 所在 `window.bounds` 高度；无 window 时回退 `KEY_WINDOW_HEIGHT`。
+#define WINDOW_HEIGHT_IN_VIEW(view) ((view).window ? (view).window.bounds.size.height : KEY_WINDOW_HEIGHT)
 
-/// 设备宽度，跟横竖屏无关
-#define DEVICE_WIDTH MIN([[UIScreen mainScreen] bounds].size.width, [[UIScreen mainScreen] bounds].size.height)
+// MARK: 显示屏 UIScreen（整屏 bounds；分屏下某一窗口可能小于整屏）
+/// 当前 `preferredScreen.bounds` 宽度（随界面方向变化）。
+#define SCREEN_WIDTH ([QMUIHelper preferredScreen].bounds.size.width)
+/// 当前 `preferredScreen.bounds` 高度。
+#define SCREEN_HEIGHT ([QMUIHelper preferredScreen].bounds.size.height)
+/// 指定 view 关联 `windowScene.screen.bounds` 宽度；无 scene 时回退 `preferredScreen`。
+#define SCREEN_WIDTH_IN_VIEW(view) ((view).window.windowScene ? (view).window.windowScene.screen.bounds.size.width : [QMUIHelper preferredScreen].bounds.size.width)
+/// 指定 view 关联 `windowScene.screen.bounds` 高度；无 scene 时回退 `preferredScreen`。
+#define SCREEN_HEIGHT_IN_VIEW(view) ((view).window.windowScene ? (view).window.windowScene.screen.bounds.size.height : [QMUIHelper preferredScreen].bounds.size.height)
 
-/// 设备高度，跟横竖屏无关
-#define DEVICE_HEIGHT MAX([[UIScreen mainScreen] bounds].size.width, [[UIScreen mainScreen] bounds].size.height)
-
-/// 在 iPad 分屏模式下等于 app 实际运行宽度，否则等同于 SCREEN_WIDTH
-#define APPLICATION_WIDTH [QMUIHelper applicationSize].width
-
-/// 在 iPad 分屏模式下等于 app 实际运行宽度，否则等同于 DEVICE_HEIGHT
-#define APPLICATION_HEIGHT [QMUIHelper applicationSize].height
+// MARK: 设备短边 / 长边（与当前界面方向无关，用于机型判断等；数据仍来自 preferredScreen.bounds）
+/// 设备短边长度（与横竖屏无关）
+#define DEVICE_WIDTH MIN([QMUIHelper preferredScreen].bounds.size.width, [QMUIHelper preferredScreen].bounds.size.height)
+/// 设备长边长度（与横竖屏无关）
+#define DEVICE_HEIGHT MAX([QMUIHelper preferredScreen].bounds.size.width, [QMUIHelper preferredScreen].bounds.size.height)
 
 /// 是否全面屏设备
 #define IS_NOTCHED_SCREEN [QMUIHelper isNotchedScreen]
@@ -174,7 +184,7 @@
 #define IS_320WIDTH_SCREEN (IS_35INCH_SCREEN || IS_40INCH_SCREEN)
 
 /// 是否Retina
-#define IS_RETINASCREEN ([[UIScreen mainScreen] scale] >= 2.0)
+#define IS_RETINASCREEN ([QMUIHelper preferredScreen].scale >= 2.0)
 
 /// 是否放大模式（iPhone 6及以上的设备支持放大模式，iPhone X 除外）
 #define IS_ZOOMEDMODE [QMUIHelper isZoomedMode]
@@ -187,11 +197,11 @@
 /// 获取一个像素
 #define PixelOne [QMUIHelper pixelOne]
 
-/// bounds && nativeBounds / scale && nativeScale
-#define ScreenBoundsSize ([[UIScreen mainScreen] bounds].size)
-#define ScreenNativeBoundsSize ([[UIScreen mainScreen] nativeBounds].size)
-#define ScreenScale ([[UIScreen mainScreen] scale])
-#define ScreenNativeScale ([[UIScreen mainScreen] nativeScale])
+/// bounds && nativeBounds / scale && nativeScale（经 preferredScreen，避免 UIScreen.mainScreen）
+#define ScreenBoundsSize ([QMUIHelper preferredScreen].bounds.size)
+#define ScreenNativeBoundsSize ([QMUIHelper preferredScreen].nativeBounds.size)
+#define ScreenScale ([QMUIHelper preferredScreen].scale)
+#define ScreenNativeScale ([QMUIHelper preferredScreen].nativeScale)
 
 /// toolBar相关frame
 #define ToolBarHeight (IS_IPAD ? (IS_NOTCHED_SCREEN ? 70 : 50) : (IS_LANDSCAPE ? PreferredValueForVisualDevice(44, 32) : 44) + SafeAreaInsetsConstantForDeviceWithNotch.bottom)
@@ -216,7 +226,7 @@
 #define NavigationContentTopConstant (QMUIHelper.navigationBarMaxYConstant)
 
 /// 判断当前是否是处于分屏模式的 iPad 或 iOS 16.1 的台前调度模式
-#define IS_SPLIT_SCREEN_IPAD (IS_IPAD && APPLICATION_WIDTH != SCREEN_WIDTH)
+#define IS_SPLIT_SCREEN_IPAD (IS_IPAD && KEY_WINDOW_WIDTH != SCREEN_WIDTH)
 
 /// iPhoneX 系列全面屏手机的安全区域的静态值
 #define SafeAreaInsetsConstantForDeviceWithNotch [QMUIHelper safeAreaInsetsForDeviceWithNotch]
@@ -225,7 +235,7 @@
 #define PreferredValueForVisualDevice(_regular, _compact) ([QMUIHelper isRegularScreen] ? _regular : _compact)
 
 /// 将所有屏幕按照 Phone/Pad 分类，由于历史上宽高比最大（最胖）的手机为 iPhone 4，所以这里以它为基准，只要宽高比比 iPhone 4 更小的，都视为 Phone，其他情况均视为 Pad。注意 iPad 分屏则取分屏后的宽高来计算。
-#define PreferredValueForInterfaceIdiom(_phone, _pad) (APPLICATION_WIDTH / APPLICATION_HEIGHT <= QMUIHelper.screenSizeFor35Inch.width / QMUIHelper.screenSizeFor35Inch.height ? _phone : _pad)
+#define PreferredValueForInterfaceIdiom(_phone, _pad) (KEY_WINDOW_WIDTH / KEY_WINDOW_HEIGHT <= QMUIHelper.screenSizeFor35Inch.width / QMUIHelper.screenSizeFor35Inch.height ? _phone : _pad)
 
 /// 区分全面屏和非全面屏
 #define PreferredValueForNotchedDevice(_notchedDevice, _otherDevice) ([QMUIHelper isNotchedScreen] ? _notchedDevice : _otherDevice)
@@ -248,7 +258,7 @@
 #define _58INCH_WIDTH [QMUIHelper screenSizeFor58Inch].width
 #define _65INCH_WIDTH [QMUIHelper screenSizeFor65Inch].width
 
-#define AS_IPAD (DynamicPreferredValueForIPad ? ((IS_IPAD && !IS_SPLIT_SCREEN_IPAD) || (IS_SPLIT_SCREEN_IPAD && APPLICATION_WIDTH >= 768)) : IS_IPAD)
+#define AS_IPAD (DynamicPreferredValueForIPad ? ((IS_IPAD && !IS_SPLIT_SCREEN_IPAD) || (IS_SPLIT_SCREEN_IPAD && KEY_WINDOW_WIDTH >= 768)) : IS_IPAD)
 #define AS_65INCH_SCREEN (IS_67INCH_SCREEN_AND_IPHONE14 || IS_67INCH_SCREEN || IS_65INCH_SCREEN || (IS_IPAD && DynamicPreferredValueForIPad && IPAD_SIMILAR_SCREEN_WIDTH == _65INCH_WIDTH))
 #define AS_61INCH_SCREEN (IS_61INCH_SCREEN_AND_IPHONE12 || IS_61INCH_SCREEN)
 #define AS_58INCH_SCREEN (IS_58INCH_SCREEN || IS_54INCH_SCREEN || ((AS_61INCH_SCREEN || AS_65INCH_SCREEN) && IS_ZOOMEDMODE) || (IS_IPAD && DynamicPreferredValueForIPad && IPAD_SIMILAR_SCREEN_WIDTH == _58INCH_WIDTH))
