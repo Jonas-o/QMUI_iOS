@@ -135,7 +135,7 @@ static char kAssociatedObjectKey_canResignKeyWindowBlock;
     if (windowScene != nil) {
         return [[self.class alloc] initWithWindowScene:windowScene];
     } else {
-        return [[self.class alloc] initWithFrame:UIScreen.mainScreen.bounds];
+        return [[self.class alloc] initWithFrame:QMUIHelper.preferredScreen.bounds];
     }
 }
 

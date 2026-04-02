@@ -79,7 +79,7 @@ static NSString * const kQMUIUserInterfaceStyleWillChangeSelectorsKey = @"qmui_u
             OverrideImplementation([UIScreen class], NSSelectorFromString(willChangeTraitCollection), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
                 return ^(UIScreen *selfObject, UITraitCollection *traitCollection) {
                     
-                    if (selfObject == UIScreen.mainScreen) {
+                    if (selfObject == QMUIHelper.preferredScreen) {
                         [UITraitCollection _qmui_setUserInterfaceStyleForTraitCollection:traitCollection];
                     }
                     

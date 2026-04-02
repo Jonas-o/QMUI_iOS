@@ -53,6 +53,27 @@ static UIScreen * QMUIPreferredScreen(void) {
     return screen;
 }
 
+static NSArray <UIWindow *> * QMUIApplicationWindows(void) {
+    __block NSArray *windows = nil;
+
+    if (@available(iOS 13.0, *)) {
+        [UIApplication.sharedApplication.connectedScenes enumerateObjectsUsingBlock:^(UIScene *scene, BOOL *stop) {
+            if ([scene isKindOfClass:UIWindowScene.class] && [scene.session.role isEqualToString:UIWindowSceneSessionRoleApplication]) {
+                windows = [(UIWindowScene *)scene windows];
+                *stop = YES;
+            }
+        }];
+    }
+
+    if (!windows || windows.count == 0) {
+        BeginIgnoreDeprecatedWarning
+            windows = UIApplication.sharedApplication.windows;
+        EndIgnoreDeprecatedWarning
+    }
+
+    return windows ?: @[];
+}
+
 static UIWindow * QMUIApplicationDelegateWindow(void) {
     UIWindow *delegateWindow = nil;
 
@@ -118,7 +139,7 @@ static UIWindow * QMUIApplicationKeyWindow(void) {
     }
 
     EndIgnoreDeprecatedWarning
-    return key ? : QMUIApplicationDelegateWindow();
+    return key ?: QMUIApplicationDelegateWindow();
 }
 
 /// `deviceName` 前缀匹配；`iPhone 16`/`iPhone 17` 不与 `iPhone 16e`/`iPhone 17e` 同档。
@@ -753,8 +774,16 @@ static NSInteger isIPhone = -1;
     return QMUIPreferredScreen();
 }
 
++ (nullable UIWindow *)applicationDelegateWindow {
+    return QMUIApplicationDelegateWindow();
+}
+
 + (nullable UIWindow *)applicationKeyWindow {
     return QMUIApplicationKeyWindow();
+}
+
++ (NSArray<__kindof UIWindow *> *)applicationWindows {
+    return QMUIApplicationWindows();
 }
 
 static NSInteger isSimulator = -1;

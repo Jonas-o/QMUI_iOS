@@ -22,7 +22,6 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, assign, readonly) BOOL qmui_didFinishLaunching;
 
 @property (nonatomic, readonly) NSArray<__kindof UIWindow *> *qmui_windows;
-
 @property (nullable, nonatomic, readonly) __kindof UIWindow *qmui_keyWindow;
 @property (nullable, nonatomic, readonly) __kindof UIWindow *qmui_delegateWindow;
 
