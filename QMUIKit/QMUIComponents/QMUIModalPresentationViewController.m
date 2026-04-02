@@ -293,7 +293,9 @@
                 }
             }
             self.window.hidden = YES;
-            self.window.windowScene = nil;
+            if (@available(iOS 13.0, *)) {
+                self.window.windowScene = nil;
+            }
             self.window.rootViewController = nil;
             self.previousKeyWindow = nil;
             [self endAppearanceTransition];
@@ -525,8 +527,12 @@
     self.appearCompletionBlock = completion;
     self.previousKeyWindow = UIApplication.sharedApplication.qmui_keyWindow;
     if (!self.window) {
-        UIWindowScene *windowScene = window.windowScene ? : UIApplication.sharedApplication.qmui_delegateWindow.windowScene;
-        self.window = [QMUIModalPresentationWindow qmui_windowWithWindowScene:windowScene];
+        if (@available(iOS 13.0, *)) {
+            UIWindowScene *windowScene = window.windowScene ? : UIApplication.sharedApplication.qmui_delegateWindow.windowScene;
+            self.window = [QMUIModalPresentationWindow qmui_windowWithWindowScene:windowScene];
+        } else {
+            self.window = [[QMUIModalPresentationWindow alloc] initWithFrame:!!window ? window.bounds : UIApplication.sharedApplication.qmui_delegateWindow.bounds];
+        }
         self.window.windowLevel = UIWindowLevelQMUIAlertView;
         self.window.backgroundColor = UIColorClear;// 避免横竖屏旋转时出现黑色
         [self updateWindowStatusBarCapture];

@@ -15,7 +15,6 @@
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
-#import "QMUICommonDefines.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -328,4 +327,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (CGFloat)baselineOffsetWhenVerticalAlignCenterInHeight:(CGFloat)height withFont:(UIFont *)font;
 @end
 
+/// 须在完整声明 `QMUIHelper` 之后再引入，否则 `QMUICommonDefines.h` 内依赖 `[QMUIHelper preferredScreen]` 的宏（如 `ScreenScale`、`flat`）会在循环 `#include` 下出现 `QMUIHelper` 未声明错误。
+
 NS_ASSUME_NONNULL_END
+
+#import "QMUICommonDefines.h"

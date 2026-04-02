@@ -23,6 +23,7 @@
 #import "UIColor+QMUI.h"
 #import "QMUICore.h"
 #import "NSArray+QMUI.h"
+#import "UIApplication+QMUI.h"
 
 // 在 iOS 8 - 11 上实际测量得到
 // Measured on iOS 8 - 11

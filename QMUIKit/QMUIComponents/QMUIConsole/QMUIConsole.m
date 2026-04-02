@@ -133,7 +133,9 @@
             [console initConsoleWindowIfNeeded];
             console.consoleWindow.alpha = 0;
             console.consoleWindow.hidden = NO;
-            console.consoleWindow.windowScene = UIApplication.sharedApplication.qmui_delegateWindow.windowScene;
+            if (@available(iOS 13.0, *)) {
+                console.consoleWindow.windowScene = UIApplication.sharedApplication.qmui_delegateWindow.windowScene;
+            }
         }];
         [UIView animateWithDuration:.25 delay:.2 options:QMUIViewAnimationOptionsCurveOut animations:^{
             console.consoleWindow.alpha = 1;
@@ -143,12 +145,18 @@
 
 + (void)hide {
     [QMUIConsole sharedInstance].consoleWindow.hidden = YES;
-    [QMUIConsole sharedInstance].consoleWindow.windowScene = nil;
+    if (@available(iOS 13.0, *)) {
+        [QMUIConsole sharedInstance].consoleWindow.windowScene = nil;
+    }
 }
 
 - (void)initConsoleWindowIfNeeded {
     if (!self.consoleWindow) {
-        self.consoleWindow = [QMUIConsoleWindow qmui_windowWithWindowScene:UIApplication.sharedApplication.qmui_delegateWindow.windowScene];
+        if (@available(iOS 13.0, *)) {
+            self.consoleWindow = [QMUIConsoleWindow qmui_windowWithWindowScene:UIApplication.sharedApplication.qmui_delegateWindow.windowScene];
+        } else {
+            self.consoleWindow = [[QMUIConsoleWindow alloc] initWithFrame:UIApplication.sharedApplication.qmui_delegateWindow.bounds];
+        }
         self.consoleViewController = [[QMUIConsoleViewController alloc] init];
         self.consoleWindow.rootViewController = self.consoleViewController;
     }

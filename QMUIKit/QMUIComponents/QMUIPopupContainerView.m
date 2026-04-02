@@ -806,7 +806,9 @@
         self.popupWindow.rootViewController = nil;
         
         self.popupWindow.hidden = YES;
-        self.popupWindow.windowScene = nil;
+        if (@available(iOS 13.0, *)) {
+            self.popupWindow.windowScene = nil;
+        }
         self.popupWindow = nil;
     } else {
         self.hidden = YES;
@@ -834,8 +836,12 @@
 
 - (void)initPopupContainerViewWindowInWindow:(nullable UIWindow *)window {
     if (!self.popupWindow) {
-        UIWindowScene *windowScene = window.windowScene ? : UIApplication.sharedApplication.qmui_delegateWindow.windowScene;
-        self.popupWindow = [QMUIPopupContainerViewWindow qmui_windowWithWindowScene:windowScene];
+        if (@available(iOS 13.0, *)) {
+            UIWindowScene *windowScene = window.windowScene ? : UIApplication.sharedApplication.qmui_delegateWindow.windowScene;
+            self.popupWindow = [QMUIPopupContainerViewWindow qmui_windowWithWindowScene:windowScene];
+        } else {
+            self.popupWindow = [[QMUIPopupContainerViewWindow alloc] initWithFrame:!!window ? window.bounds : UIApplication.sharedApplication.qmui_delegateWindow.bounds];
+        }
         self.popupWindow.qmui_capturesStatusBarAppearance = NO;
         self.popupWindow.backgroundColor = UIColorClear;
         self.popupWindow.windowLevel = UIWindowLevelQMUIAlertView;
