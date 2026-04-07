@@ -163,6 +163,32 @@ QMUISynthesizeIdStrongProperty(qmui_interactiveGestureDelegator, setQmui_interac
             };
         });
         
+        if (QMUIHelper.isUsedLiquidGlass) {
+            OverrideImplementation(NSClassFromString([NSString qmui_stringByConcat:@"UIKit.", @"NavigationBar", @"ContentView", nil]), NSSelectorFromString(@"__backButtonAction:"), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
+                return ^(UIView *selfObject, id firstArgv) {
+                    
+                    if ([selfObject.superview isKindOfClass:UINavigationBar.class]) {
+                        UINavigationBar *bar = (UINavigationBar *)selfObject.superview;
+                        if ([bar.delegate isKindOfClass:UINavigationController.class]) {
+                            UINavigationController *navController = (UINavigationController *)bar.delegate;
+                            BOOL canPopViewController = YES;
+                            UIViewController *viewController = navController.topViewController;
+                            if ([viewController respondsToSelector:@selector(shouldPopViewControllerByBackButtonOrPopGesture:)] &&
+                                [viewController shouldPopViewControllerByBackButtonOrPopGesture:NO] == NO) {
+                                canPopViewController = NO;
+                            }
+                            if (!canPopViewController) return;
+                        }
+                    }
+                    
+                    // call super
+                    void (*originSelectorIMP)(id, SEL, id);
+                    originSelectorIMP = (void (*)(id, SEL, id))originalIMPProvider();
+                    originSelectorIMP(selfObject, originCMD, firstArgv);
+                };
+            });
+        }
+        
         OverrideImplementation([UINavigationController class], NSSelectorFromString(@"navigationTransitionView:didEndTransition:fromView:toView:"), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
             return ^void(UINavigationController *selfObject, UIView *transitionView, NSInteger transition, UIView *fromView, UIView *toView) {
                 
