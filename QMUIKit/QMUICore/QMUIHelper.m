@@ -33,29 +33,43 @@ static NSString *const kQMUIResourcesSwiftPMBundleName = @"QMUIKit_QMUIKit";
 
 /// iOS 26+ 起 `UIScreen.mainScreen` 废弃，优先从已连接的 `UIWindowScene` 取 screen；无 scene 时回退主屏（保留旧行为）。
 /// App 未完成加载、`UIApplication.sharedApplication` 为 nil 时跳过 `connectedScenes`，直接回退 `[UIScreen mainScreen]`，不可放在 `UIApplication (QMUI)` 的实例方法里。
-static UIScreen *QMUIPreferredScreen(void) {
-    if (@available(iOS 13.0, *)) {
-        UIApplication *app = UIApplication.sharedApplication;
 
-        if (app) {
-            for (UIScene *scene in app.connectedScenes) {
-                if (![scene isKindOfClass:[UIWindowScene class]] || ![scene.session.role isEqualToString:UIWindowSceneSessionRoleApplication]) {
-                    continue;
-                }
-
-                UIWindowScene *windowScene = (UIWindowScene *)scene;
-
-                if (windowScene.screen) {
-                    return windowScene.screen;
-                }
-            }
-        }
+API_AVAILABLE(ios(13.0))
+static UIScreen *ReadSceneScreen(void) {
+    UIApplication *app = UIApplication.sharedApplication;
+    if (!app) return nil;
+    for (UIScene *scene in app.connectedScenes) {
+        if (![scene isKindOfClass:[UIWindowScene class]]) continue;
+        if (![scene.session.role isEqualToString:UIWindowSceneSessionRoleApplication]) continue;
+        return [(UIWindowScene *)scene screen];
     }
+    return nil;
+}
 
+static UIScreen *ReadMainScreen(void) {
     BeginIgnoreDeprecatedWarning
     UIScreen *screen = [UIScreen mainScreen];
     EndIgnoreDeprecatedWarning
     return screen;
+}
+
+static UIScreen *QMUIPreferredScreen(void) {
+    if (@available(iOS 13.0, *)) {
+        static UIScreen *cachedScreen = nil;
+        
+        if (NSThread.isMainThread) {
+            cachedScreen = ReadSceneScreen() ?: ReadMainScreen();
+            return cachedScreen;
+        }
+        // 后台线程：立刻返回缓存，避免等待主线程
+        UIScreen *fallback = cachedScreen ?: ReadMainScreen();
+        // 异步到主线程刷新缓存（不影响当前调用）
+        dispatch_async(dispatch_get_main_queue(), ^{
+            cachedScreen = ReadSceneScreen() ?: ReadMainScreen();
+        });
+        return fallback;
+    }
+    return ReadMainScreen();
 }
 
 /// `deviceName` 前缀匹配；`iPhone 16`/`iPhone 17` 不与 `iPhone 16e`/`iPhone 17e` 同档。
