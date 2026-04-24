@@ -108,11 +108,22 @@
     
     self.textView = [[QMUITextView alloc] init];
     self.textView.textContainerInset = UIEdgeInsetsMake(2, 0, 2, 0);
+    self.textView.textContainer.lineFragmentPadding = 0;
     self.textView.backgroundColor = [UIColor clearColor];
-    self.textView.layoutManager.usesFontLeading = NO;
-    self.textView.layoutManager.allowsNonContiguousLayout = NO;
-    self.textView.scrollsToTop = NO;
+    
     self.textView.editable = NO;
+    self.textView.selectable = YES;
+    self.textView.scrollsToTop = NO;
+    self.textView.scrollEnabled = YES;
+    
+    if (@available(iOS 16.0, *)) {
+        // TextKit 2：避免访问 layoutManager，防止切回兼容模式
+        self.textView.textLayoutManager.usesFontLeading = NO;
+    } else {
+        // TextKit 1 回退
+        self.textView.layoutManager.usesFontLeading = NO;
+        self.textView.layoutManager.allowsNonContiguousLayout = YES;
+    }
     self.textView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
     [self.contentView addSubview:self.textView];
 }

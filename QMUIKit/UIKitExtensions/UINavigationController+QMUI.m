@@ -28,8 +28,12 @@
 
 @property(nonatomic, strong) NSMutableArray<QMUINavigationActionDidChangeBlock> *qmuinc_navigationActionDidChangeBlocks;
 @property(nullable, nonatomic, readwrite) UIViewController *qmui_endedTransitionTopViewController;
+
 @property(nullable, nonatomic, weak, readonly) id<UIGestureRecognizerDelegate> qmui_interactivePopGestureRecognizerDelegate;
 @property(nullable, nonatomic, strong) _QMUINavigationInteractiveGestureDelegator *qmui_interactiveGestureDelegator;
+
+@property(nullable, nonatomic, weak, readonly) id<UIGestureRecognizerDelegate> qmui_interactiveContentPopGestureRecognizerDelegate;
+@property(nullable, nonatomic, strong) _QMUINavigationInteractiveGestureDelegator *qmui_interactiveContentGestureDelegator;
 @end
 
 @implementation UINavigationController (QMUI)
@@ -39,6 +43,8 @@ QMUISynthesizeIdStrongProperty(qmuinc_navigationActionDidChangeBlocks, setQmuinc
 QMUISynthesizeIdWeakProperty(qmui_endedTransitionTopViewController, setQmui_endedTransitionTopViewController)
 QMUISynthesizeIdWeakProperty(qmui_interactivePopGestureRecognizerDelegate, setQmui_interactivePopGestureRecognizerDelegate)
 QMUISynthesizeIdStrongProperty(qmui_interactiveGestureDelegator, setQmui_interactiveGestureDelegator)
+QMUISynthesizeIdWeakProperty(qmui_interactiveContentPopGestureRecognizerDelegate, setQmui_interactiveContentPopGestureRecognizerDelegate)
+QMUISynthesizeIdStrongProperty(qmui_interactiveContentGestureDelegator, setQmui_interactiveContentGestureDelegator)
 
 + (void)load {
     static dispatch_once_t onceToken;
@@ -107,6 +113,12 @@ QMUISynthesizeIdStrongProperty(qmui_interactiveGestureDelegator, setQmui_interac
             selfObject.qmui_interactivePopGestureRecognizerDelegate = selfObject.interactivePopGestureRecognizer.delegate;
             selfObject.qmui_interactiveGestureDelegator = [[_QMUINavigationInteractiveGestureDelegator alloc] initWithParentViewController:selfObject];
             selfObject.interactivePopGestureRecognizer.delegate = selfObject.qmui_interactiveGestureDelegator;
+            
+            if (@available(iOS 26.0, *)) {
+                selfObject.qmui_interactiveContentPopGestureRecognizerDelegate = selfObject.interactiveContentPopGestureRecognizer.delegate;
+                selfObject.qmui_interactiveContentGestureDelegator = [[_QMUINavigationInteractiveGestureDelegator alloc] initWithParentViewController:selfObject];
+                selfObject.interactiveContentPopGestureRecognizer.delegate = selfObject.qmui_interactiveContentGestureDelegator;
+            }
             
             // 根据 NavBarContainerClasses 的值来决定是否应用 bar.tintColor
             // tintColor 没有被添加 UI_APPEARANCE_SELECTOR，所以没有采用 UIAppearance 的方式去实现（虽然它实际上是支持的）
@@ -604,6 +616,8 @@ static char kAssociatedObjectKey_navigationAction;
 
 @implementation _QMUINavigationInteractiveGestureDelegator
 
+static NSNumber *_catchedCanPopResult = nil;
+
 - (instancetype)initWithParentViewController:(UINavigationController *)parentViewController {
     if (self = [super init]) {
         _parentViewController = parentViewController;
@@ -611,11 +625,32 @@ static char kAssociatedObjectKey_navigationAction;
     return self;
 }
 
+- (BOOL)isInteractivePopGestureRecognizer:(UIGestureRecognizer *)gestureRecognizer {
+    return gestureRecognizer == self.parentViewController.interactivePopGestureRecognizer;
+}
+
+- (BOOL)isInteractiveContentPopGestureRecognizer:(UIGestureRecognizer *)gestureRecognizer {
+    if (@available(iOS 26.0, *)) {
+        return gestureRecognizer == self.parentViewController.interactiveContentPopGestureRecognizer;
+    }
+    return NO;
+}
+
+- (void)setCatchedCanPopResult:(BOOL)result {
+    _catchedCanPopResult = @(result);
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(removeCatchedCanPopResult) object:nil];
+    [self performSelector:@selector(removeCatchedCanPopResult) withObject:nil afterDelay:1 inModes:@[NSRunLoopCommonModes]];
+}
+
+- (void)removeCatchedCanPopResult {
+    _catchedCanPopResult = nil;
+}
+
 #pragma mark - <UIGestureRecognizerDelegate>
 
 // iOS 13.4 开始会优先询问该方法，只有返回 YES 后才会继续后续的逻辑
 - (BOOL)_gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveEvent:(UIEvent *)event {
-    if (gestureRecognizer == self.parentViewController.interactivePopGestureRecognizer) {
+    if ([self isInteractivePopGestureRecognizer:gestureRecognizer]) {
         NSObject <UIGestureRecognizerDelegate> *originGestureDelegate = self.parentViewController.qmui_interactivePopGestureRecognizerDelegate;
         if ([originGestureDelegate respondsToSelector:_cmd]) {
             BOOL originalValue = YES;
@@ -631,15 +666,48 @@ static char kAssociatedObjectKey_navigationAction;
             return originalValue;
         }
     }
+    
+    if ([self isInteractiveContentPopGestureRecognizer:gestureRecognizer]) {
+        NSObject <UIGestureRecognizerDelegate> *originGestureDelegate = self.parentViewController.qmui_interactiveContentPopGestureRecognizerDelegate;
+        if ([originGestureDelegate respondsToSelector:_cmd]) {
+            BOOL originalValue = YES;
+            [originGestureDelegate qmui_performSelector:_cmd withPrimitiveReturnValue:&originalValue arguments:&gestureRecognizer, &event, nil];
+            if (!originalValue
+                // 在开启 forceEnableInteractivePopGestureRecognizer 的界面被 push 的过程中快速手势返回，容易导致 App 卡死
+                // https://github.com/Tencent/QMUI_iOS/issues/1498
+                && self.parentViewController.qmui_navigationAction == QMUINavigationActionUnknow
+                && [self.parentViewController shouldForceEnableInteractivePopGestureRecognizer]) {
+                return YES;
+            }
+            
+            return originalValue;
+        }
+    }
+    
     return YES;
 }
 
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
-    if (gestureRecognizer == self.parentViewController.interactivePopGestureRecognizer) {
-        BOOL canPopViewController = [self.parentViewController canPopViewController:self.parentViewController.topViewController byPopGesture:YES];
+    if ([self isInteractivePopGestureRecognizer:gestureRecognizer]) {
+        BOOL canPopViewController = _catchedCanPopResult ? _catchedCanPopResult.boolValue : [self.parentViewController canPopViewController:self.parentViewController.topViewController byPopGesture:YES];
+        [self setCatchedCanPopResult:canPopViewController];
         if (canPopViewController) {
             if ([self.parentViewController.qmui_interactivePopGestureRecognizerDelegate respondsToSelector:_cmd]) {
                 BOOL result = [self.parentViewController.qmui_interactivePopGestureRecognizerDelegate gestureRecognizerShouldBegin:gestureRecognizer];
+                return result;
+            } else {
+                return NO;
+            }
+        } else {
+            return NO;
+        }
+    }
+    if ([self isInteractiveContentPopGestureRecognizer:gestureRecognizer]) {
+        BOOL canPopViewController = _catchedCanPopResult ? _catchedCanPopResult.boolValue : [self.parentViewController canPopViewController:self.parentViewController.topViewController byPopGesture:YES];
+        [self setCatchedCanPopResult:canPopViewController];
+        if (canPopViewController) {
+            if ([self.parentViewController.qmui_interactiveContentPopGestureRecognizerDelegate respondsToSelector:_cmd]) {
+                BOOL result = [self.parentViewController.qmui_interactiveContentPopGestureRecognizerDelegate gestureRecognizerShouldBegin:gestureRecognizer];
                 return result;
             } else {
                 return NO;
@@ -652,8 +720,18 @@ static char kAssociatedObjectKey_navigationAction;
 }
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
-    if (gestureRecognizer == self.parentViewController.interactivePopGestureRecognizer) {
+    if ([self isInteractivePopGestureRecognizer:gestureRecognizer]) {
         id<UIGestureRecognizerDelegate>originGestureDelegate = self.parentViewController.qmui_interactivePopGestureRecognizerDelegate;
+        if ([originGestureDelegate respondsToSelector:_cmd]) {
+            BOOL originalValue = [originGestureDelegate gestureRecognizer:gestureRecognizer shouldReceiveTouch:touch];
+            if (!originalValue && [self.parentViewController shouldForceEnableInteractivePopGestureRecognizer]) {
+                return YES;
+            }
+            return originalValue;
+        }
+    }
+    if ([self isInteractiveContentPopGestureRecognizer:gestureRecognizer]) {
+        id<UIGestureRecognizerDelegate>originGestureDelegate = self.parentViewController.qmui_interactiveContentPopGestureRecognizerDelegate;
         if ([originGestureDelegate respondsToSelector:_cmd]) {
             BOOL originalValue = [originGestureDelegate gestureRecognizer:gestureRecognizer shouldReceiveTouch:touch];
             if (!originalValue && [self.parentViewController shouldForceEnableInteractivePopGestureRecognizer]) {
@@ -666,9 +744,15 @@ static char kAssociatedObjectKey_navigationAction;
 }
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
-    if (gestureRecognizer == self.parentViewController.interactivePopGestureRecognizer) {
+    if ([self isInteractivePopGestureRecognizer:gestureRecognizer]) {
         if ([self.parentViewController.qmui_interactivePopGestureRecognizerDelegate respondsToSelector:_cmd]) {
             BOOL result = [self.parentViewController.qmui_interactivePopGestureRecognizerDelegate gestureRecognizer:gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:otherGestureRecognizer];
+            return result;
+        }
+    }
+    if ([self isInteractiveContentPopGestureRecognizer:gestureRecognizer]) {
+        if ([self.parentViewController.qmui_interactiveContentPopGestureRecognizerDelegate respondsToSelector:_cmd]) {
+            BOOL result = [self.parentViewController.qmui_interactiveContentPopGestureRecognizerDelegate gestureRecognizer:gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:otherGestureRecognizer];
             return result;
         }
     }
@@ -677,7 +761,7 @@ static char kAssociatedObjectKey_navigationAction;
 
 // 是否要gestureRecognizer检测失败了，才去检测otherGestureRecognizer
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
-    if (gestureRecognizer == self.parentViewController.interactivePopGestureRecognizer) {
+    if ([self isInteractivePopGestureRecognizer:gestureRecognizer] || [self isInteractiveContentPopGestureRecognizer:gestureRecognizer]) {
         // 如果只是实现了上面几个手势的delegate，那么返回的手势和当前界面上的scrollview或者其他存在的手势会冲突，所以如果判断是返回手势，则优先响应返回手势再响应其他手势。
         // 不知道为什么，系统竟然没有实现这个delegate，那么它是怎么处理返回手势和其他手势的优先级的
         return YES;
