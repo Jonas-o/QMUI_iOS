@@ -189,6 +189,7 @@
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         [self qmuisafety_UIKeyboardImpl];
+        [self qmuisafety_UIKeyboardStateManager];
         [self qmuisafety_NSRegularExpression];
         [self qmuisafety_NSString];
         [self qmuisafety_NSAttributedString];
@@ -196,10 +197,17 @@
 }
 
 static BOOL QMUIAvoidSubstring = NO;
-+ (void)qmuisafety_UIKeyboardImpl {
-    // UIKeyboardImpl
+
+static SEL QMUIKeyboardHandleKeyWithStringSelector(void) {
+    return NSSelectorFromString([NSString qmui_stringByConcat:@"handleKeyWithString:", @"forKeyEvent:", @"executionContext:", nil]);
+}
+
+static void QMUIInstallKeyboardHandleKeyWithStringSafety(Class keyboardClass) {
+    if (!keyboardClass) {
+        return;
+    }
     // - (void) handleKeyWithString:(id)arg1 forKeyEvent:(id)arg2 executionContext:(id)arg3;
-    OverrideImplementation(NSClassFromString([NSString qmui_stringByConcat:@"UIKeyb", @"oard", @"Impl", nil]), NSSelectorFromString([NSString qmui_stringByConcat:@"handleKeyWithString:", @"forKeyEvent:", @"executionContext:", nil]), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
+    OverrideImplementation(keyboardClass, QMUIKeyboardHandleKeyWithStringSelector(), ^id(__unsafe_unretained Class originClass, SEL originCMD, IMP (^originalIMPProvider)(void)) {
         return ^(NSObject *selfObject, NSString *string, UIPressesEvent *event, NSObject *context) {
             
             QMUIAvoidSubstring = YES;
@@ -212,6 +220,16 @@ static BOOL QMUIAvoidSubstring = NO;
             QMUIAvoidSubstring = NO;
         };
     });
+}
+
++ (void)qmuisafety_UIKeyboardImpl {
+    // UIKeyboardImpl
+    QMUIInstallKeyboardHandleKeyWithStringSafety(NSClassFromString([NSString qmui_stringByConcat:@"UIKeyb", @"oard", @"Impl", nil]));
+}
+
++ (void)qmuisafety_UIKeyboardStateManager {
+    // _UIKeyboardStateManager，iOS 26+ Emoji/Sticker 键盘插入时会走此路径
+    QMUIInstallKeyboardHandleKeyWithStringSafety(NSClassFromString([NSString qmui_stringByConcat:@"_", @"UIKeyb", @"oard", @"State", @"Manager", nil]));
 }
 
 + (void)qmuisafety_NSRegularExpression {
