@@ -761,7 +761,7 @@ static NSNumber *_catchedCanPopResult = nil;
 
 // 是否要gestureRecognizer检测失败了，才去检测otherGestureRecognizer
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
-    if ([self isInteractivePopGestureRecognizer:gestureRecognizer] || [self isInteractiveContentPopGestureRecognizer:gestureRecognizer]) {
+    if ([self isInteractivePopGestureRecognizer:gestureRecognizer]) {
         // 如果只是实现了上面几个手势的delegate，那么返回的手势和当前界面上的scrollview或者其他存在的手势会冲突，所以如果判断是返回手势，则优先响应返回手势再响应其他手势。
         // 不知道为什么，系统竟然没有实现这个delegate，那么它是怎么处理返回手势和其他手势的优先级的
         return YES;
